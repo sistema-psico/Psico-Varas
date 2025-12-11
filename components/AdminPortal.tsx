@@ -26,7 +26,9 @@ import {
   Wallet,
   Smartphone,
   Trash2,
-  UserCog
+  UserCog,
+  MapPin,
+  Briefcase
 } from 'lucide-react';
 import { Appointment, AppointmentStatus, PaymentMethod, PaymentStatus, WorkingHours, PatientProfile } from '../types';
 import { DataService } from '../services/dataService';
@@ -50,6 +52,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const [professionalName, setProfessionalName] = useState('');
   const [professionalSpecialty, setProfessionalSpecialty] = useState('');
   const [professionalAddress, setProfessionalAddress] = useState('');
+  const [professionalPrice, setProfessionalPrice] = useState<number>(5000); // Estado para el precio
 
   // Search State
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
@@ -106,6 +109,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       setProfessionalName(profData.name);
       setProfessionalSpecialty(profData.specialty);
       setProfessionalAddress(profData.address);
+      setProfessionalPrice(profData.price); // Cargar precio
 
     } catch (error) {
       console.error("Error loading data:", error);
@@ -148,7 +152,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       await DataService.saveProfessionalProfile({
         name: professionalName,
         specialty: professionalSpecialty,
-        address: professionalAddress
+        address: professionalAddress,
+        price: Number(professionalPrice) // Guardar precio
       });
       alert('Configuración actualizada correctamente');
   };
@@ -180,7 +185,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       date: manualForm.date,
       time: manualForm.time,
       status: AppointmentStatus.CONFIRMED,
-      cost: 5000,
+      cost: Number(professionalPrice), // Usar precio configurado
       paymentStatus: PaymentStatus.UNPAID,
       paymentMethod: PaymentMethod.PENDING
     });
@@ -343,7 +348,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               <div className="p-4 bg-gradient-to-br from-teal-500 to-emerald-600 text-white rounded-2xl shadow-lg shadow-teal-500/30"><Users size={24} /></div>
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Pacientes</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{new Set(appointments.map(a => a.patientName)).size}</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{Object.keys(allProfiles).length || new Set(appointments.map(a => a.patientName)).size}</p>
               </div>
             </div>
           </div>
@@ -494,6 +499,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         };
       });
     
+    // Add manually created patients that might not have appointments yet
     Object.values(allProfiles).forEach(profile => {
       if (!uniquePatients.find(p => p.id === profile.id)) {
         uniquePatients.push({
@@ -664,6 +670,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                              }`}></span>
                           </div>
                        )})}
+                    </div>
+                 </div>
+
+                 <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-3xl shadow-xl text-white relative overflow-hidden group">
+                    <div className="absolute top-[-20%] right-[-20%] w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-2 mb-4 font-bold text-indigo-100"><BrainCircuit size={20} /> <h3>Resumen IA</h3></div>
+                        {!aiSummary ? (
+                           <button onClick={() => generateAiSummary(patientData.name, patientData.appointments)} disabled={isGeneratingAi} className="w-full bg-white/20 hover:bg-white/30 backdrop-blur-md text-white border border-white/20 py-3 rounded-xl text-sm font-bold shadow-lg transition-all disabled:opacity-50">{isGeneratingAi ? 'Analizando...' : 'Generar Resumen'}</button>
+                        ) : (
+                           <div className="bg-white/10 backdrop-blur-md border border-white/10 p-4 rounded-2xl text-xs text-indigo-50 max-h-60 overflow-y-auto leading-relaxed custom-scrollbar"><div dangerouslySetInnerHTML={{ __html: aiSummary.replace(/\n/g, '<br/>') }} /></div>
+                        )}
                     </div>
                  </div>
 
@@ -919,6 +937,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                       onChange={(e) => setProfessionalAddress(e.target.value)}
                       className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
                       placeholder="Ej: Av. Corrientes 1234, Piso 5"
+                    />
+                 </div>
+                 {/* Nuevo Campo de Precio */}
+                 <div>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Valor Sesión ($)</label>
+                    <input 
+                      type="number" 
+                      value={professionalPrice}
+                      onChange={(e) => setProfessionalPrice(Number(e.target.value))}
+                      className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+                      placeholder="5000"
                     />
                  </div>
                </div>
