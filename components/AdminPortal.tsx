@@ -29,7 +29,9 @@ import {
   Wallet,
   Smartphone,
   Trash2,
-  UserCog
+  UserCog,
+  MapPin,
+  Briefcase
 } from 'lucide-react';
 import { Appointment, AppointmentStatus, PaymentMethod, PaymentStatus, WorkingHours, PatientProfile } from '../types';
 import { DataService } from '../services/dataService';
@@ -49,8 +51,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const [schedule, setSchedule] = useState<WorkingHours[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Configuration State
+  // Configuration State (Extended)
   const [professionalName, setProfessionalName] = useState('');
+  const [professionalSpecialty, setProfessionalSpecialty] = useState('');
+  const [professionalAddress, setProfessionalAddress] = useState('');
 
   // Search State
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
@@ -98,12 +102,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       const appts = await DataService.getAppointments();
       const sched = await DataService.getScheduleConfig();
       const profiles = await DataService.getAllPatientProfiles();
-      const profName = await DataService.getProfessionalName(); // CORREGIDO
+      const profData = await DataService.getProfessionalProfile(); // UPDATED
       
       setAppointments(appts);
       setSchedule(sched);
       setAllProfiles(profiles);
-      setProfessionalName(profName);
+      
+      setProfessionalName(profData.name);
+      setProfessionalSpecialty(profData.specialty);
+      setProfessionalAddress(profData.address);
+
     } catch (error) {
       console.error("Error loading data:", error);
     } finally {
@@ -140,10 +148,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     setPaymentAppointment(null); 
   };
 
-  const handleProfessionalNameSave = async (e: React.FormEvent) => {
+  const handleProfessionalConfigSave = async (e: React.FormEvent) => {
       e.preventDefault();
-      await DataService.saveProfessionalName(professionalName); // CORREGIDO
-      alert('Nombre actualizado correctamente');
+      await DataService.saveProfessionalProfile({
+        name: professionalName,
+        specialty: professionalSpecialty,
+        address: professionalAddress
+      });
+      alert('Configuración actualizada correctamente');
   };
 
   const handleNoteChange = (id: string, note: string) => {
@@ -217,12 +229,31 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     });
   };
 
+  const handleNewPatient = () => {
+    const newId = 'manual-' + Date.now();
+    setSelectedPatientId(newId);
+    setAiSummary('');
+    setIsProfileExpanded(true);
+    setPatientProfile({
+      id: newId,
+      firstName: '',
+      lastName: '',
+      dni: '',
+      birthDate: '',
+      insurance: '',
+      diagnosis: '',
+      notes: ''
+    });
+  };
+
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (patientProfile) {
       await DataService.savePatientProfile(patientProfile);
       setAllProfiles(prev => ({...prev, [patientProfile.id]: patientProfile}));
       setIsProfileExpanded(false);
+      // If it was a new patient, reload data to ensure lists update if we add logic for it later
+      loadData();
     }
   };
 
@@ -318,7 +349,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               <div className="p-4 bg-gradient-to-br from-teal-500 to-emerald-600 text-white rounded-2xl shadow-lg shadow-teal-500/30"><Users size={24} /></div>
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Pacientes</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{new Set(appointments.map(a => a.patientName)).size}</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{Object.keys(allProfiles).length || new Set(appointments.map(a => a.patientName)).size}</p>
               </div>
             </div>
           </div>
@@ -468,6 +499,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
           appointments: patientAppts
         };
       });
+    
+    // Add manually created patients that might not have appointments yet
+    Object.values(allProfiles).forEach(profile => {
+      if (!uniquePatients.find(p => p.id === profile.id)) {
+        uniquePatients.push({
+          id: profile.id,
+          name: `${profile.firstName} ${profile.lastName}`,
+          phone: '',
+          totalVisits: 0,
+          lastVisit: undefined,
+          appointments: []
+        });
+      }
+    });
 
     if (patientSearchTerm) {
       const term = patientSearchTerm.toLowerCase();
@@ -494,7 +539,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         <div className="space-y-6 animate-slide-up">
            <div className="flex items-center gap-4 mb-2">
               <button onClick={() => { setSelectedPatientId(null); setPatientProfile(null); }} className="p-3 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 text-gray-600 dark:text-gray-300 transition-all"><ChevronLeft size={24} /></button>
-              <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Ficha: <span className="text-primary-600 dark:text-primary-400">{patientData.name}</span></h2>
+              <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Ficha: <span className="text-primary-600 dark:text-primary-400">{patientData.name.trim() || 'Nuevo Paciente'}</span></h2>
            </div>
 
            <div className="glass-panel rounded-3xl shadow-sm border border-white/60 overflow-hidden">
@@ -548,37 +593,41 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               <div className="lg:col-span-2 space-y-6">
                  <div className="space-y-4">
                    <h3 className="font-bold text-gray-800 dark:text-gray-100 text-xl">Historia Clínica</h3>
-                   {sortedHistory.map(appt => {
-                     const isUnsaved = unsavedNotes.has(appt.id);
-                     return (
-                     <div key={appt.id} className="glass-panel p-6 rounded-2xl shadow-sm border border-white/60 relative group hover:shadow-md transition-all">
-                        <div className="flex justify-between items-center mb-3">
-                           <span className="font-bold text-gray-900 dark:text-white">{appt.date} <span className="text-gray-400 font-light mx-1">|</span> {appt.time} hs</span>
-                           <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wide border ${appt.status === AppointmentStatus.COMPLETED ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 border-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>{appt.status}</span>
+                   {sortedHistory.length === 0 ? (
+                     <div className="text-center py-8 text-gray-400 bg-white/30 dark:bg-gray-800/30 rounded-2xl border border-white/50">No hay turnos previos para mostrar historia clínica.</div>
+                   ) : (
+                    sortedHistory.map(appt => {
+                        const isUnsaved = unsavedNotes.has(appt.id);
+                        return (
+                        <div key={appt.id} className="glass-panel p-6 rounded-2xl shadow-sm border border-white/60 relative group hover:shadow-md transition-all">
+                            <div className="flex justify-between items-center mb-3">
+                            <span className="font-bold text-gray-900 dark:text-white">{appt.date} <span className="text-gray-400 font-light mx-1">|</span> {appt.time} hs</span>
+                            <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wide border ${appt.status === AppointmentStatus.COMPLETED ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 border-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>{appt.status}</span>
+                            </div>
+                            <textarea 
+                            className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 text-sm bg-white/50 dark:bg-gray-700/50 focus:bg-white dark:focus:bg-gray-600 dark:text-white transition-colors outline-none focus:ring-2 focus:ring-blue-200"
+                            rows={4} 
+                            placeholder="Escriba las observaciones de la sesión..."
+                            value={appt.clinicalObservations || ''}
+                            onChange={(e) => handleNoteChange(appt.id, e.target.value)}
+                            />
+                            <div className="flex justify-end mt-3">
+                            {isUnsaved ? (
+                                <button 
+                                    onClick={() => handleSaveNote(appt.id, appt.clinicalObservations || '')}
+                                    className="bg-primary-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-primary-700 flex items-center gap-2 shadow-md animate-pulse"
+                                >
+                                    <Save size={14} /> Guardar Nota
+                                </button>
+                            ) : (
+                                <div className="flex items-center gap-1 text-green-600 dark:text-green-400 text-xs font-bold px-3 py-1 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                                <Check size={14} /> Guardado
+                                </div>
+                            )}
+                            </div>
                         </div>
-                        <textarea 
-                          className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 text-sm bg-white/50 dark:bg-gray-700/50 focus:bg-white dark:focus:bg-gray-600 dark:text-white transition-colors outline-none focus:ring-2 focus:ring-blue-200"
-                          rows={4} 
-                          placeholder="Escriba las observaciones de la sesión..."
-                          value={appt.clinicalObservations || ''}
-                          onChange={(e) => handleNoteChange(appt.id, e.target.value)}
-                        />
-                        <div className="flex justify-end mt-3">
-                           {isUnsaved ? (
-                             <button 
-                                onClick={() => handleSaveNote(appt.id, appt.clinicalObservations || '')}
-                                className="bg-primary-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-primary-700 flex items-center gap-2 shadow-md animate-pulse"
-                             >
-                                <Save size={14} /> Guardar Nota
-                             </button>
-                           ) : (
-                             <div className="flex items-center gap-1 text-green-600 dark:text-green-400 text-xs font-bold px-3 py-1 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                               <Check size={14} /> Guardado
-                             </div>
-                           )}
-                        </div>
-                     </div>
-                   )})}
+                    )})
+                   )}
                  </div>
               </div>
 
@@ -662,7 +711,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     return (
       <div className="space-y-8 animate-fade-in">
          <div className="flex flex-col gap-4">
-             <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Pacientes</h2>
+             <div className="flex justify-between items-center">
+                <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Pacientes</h2>
+                <button onClick={handleNewPatient} className="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 shadow-lg hover:bg-black dark:hover:bg-gray-200 transition-all">
+                    <Plus size={18} /> Nuevo Paciente
+                </button>
+             </div>
              <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                 <input
@@ -713,215 +767,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       </div>
     );
   };
-
-  const renderFinances = () => {
-    const totalIncome = appointments
-      .filter(a => a.status === AppointmentStatus.COMPLETED || a.status === AppointmentStatus.CONFIRMED)
-      .reduce((sum, a) => sum + (a.cost || 0), 0);
-
-    const paidIncome = appointments
-      .filter(a => a.paymentStatus === PaymentStatus.PAID)
-      .reduce((sum, a) => sum + (a.cost || 0), 0);
-    
-    const pendingIncome = totalIncome - paidIncome;
-
-    const data = [
-      { name: 'Cobrado', value: paidIncome },
-      { name: 'Pendiente', value: pendingIncome },
-    ];
-
-    const paymentMethodsStats = appointments
-      .filter(a => a.paymentStatus === PaymentStatus.PAID)
-      .reduce((acc, curr) => {
-        const method = curr.paymentMethod || 'Desconocido';
-        acc[method] = (acc[method] || 0) + curr.cost;
-        return acc;
-      }, {} as Record<string, number>);
-
-    const barData = Object.entries(paymentMethodsStats).map(([name, value]) => ({
-      name,
-      value
-    }));
-
-    return (
-      <div className="space-y-8 animate-fade-in">
-        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Finanzas</h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-           <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 flex items-center justify-between">
-              <div>
-                 <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Total Cobrado</p>
-                 <p className="text-3xl font-black text-green-600 dark:text-green-400">${paidIncome}</p>
-              </div>
-              <div className="p-4 bg-green-100 dark:bg-green-900/30 rounded-2xl text-green-600 dark:text-green-400">
-                 <DollarSign size={24} />
-              </div>
-           </div>
-           <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 flex items-center justify-between">
-              <div>
-                 <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Pendiente de Cobro</p>
-                 <p className="text-3xl font-black text-red-500 dark:text-red-400">${pendingIncome}</p>
-              </div>
-              <div className="p-4 bg-red-100 dark:bg-red-900/30 rounded-2xl text-red-500 dark:text-red-400">
-                 <AlertCircle size={24} />
-              </div>
-           </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-           <div className="glass-panel p-8 rounded-3xl shadow-lg border border-white/60 h-96 flex flex-col">
-              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-6">Estado de Pagos</h3>
-               <div className="flex-1 min-h-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={data}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
-                      paddingAngle={5}
-                      dataKey="value"
-                      stroke="none"
-                    >
-                      {data.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                        contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', backgroundColor: 'rgba(255,255,255,0.9)'}}
-                    />
-                    <Legend verticalAlign="bottom" height={36}/>
-                  </PieChart>
-                </ResponsiveContainer>
-               </div>
-           </div>
-
-           <div className="glass-panel p-8 rounded-3xl shadow-lg border border-white/60 h-96 flex flex-col">
-              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-6">Métodos de Pago</h3>
-               <div className="flex-1 min-h-0">
-                {barData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={barData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" opacity={0.3} vertical={false} />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#9ca3af'}} />
-                      <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#9ca3af'}} />
-                      <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
-                      <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                        {barData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={BAR_COLORS[index % BAR_COLORS.length]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-gray-400">
-                    No hay datos de pagos aún
-                  </div>
-                )}
-               </div>
-           </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderSettings = () => {
-    const days: string[] = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    const hours: number[] = Array.from({ length: 15 }, (_, i) => i + 8); 
-
-    const toggleHour = (dayIndex: number, hour: number) => {
-      const newSchedule = [...schedule];
-      const dayConfig = newSchedule.find(s => s.dayOfWeek === dayIndex);
-      if (dayConfig) {
-        if (!dayConfig.activeHours) dayConfig.activeHours = [];
-        
-        if (dayConfig.activeHours.includes(hour)) {
-          dayConfig.activeHours = dayConfig.activeHours.filter(h => h !== hour);
-        } else {
-          dayConfig.activeHours.push(hour);
-        }
-        dayConfig.isEnabled = dayConfig.activeHours.length > 0;
-        
-        saveSchedule(newSchedule);
-      }
-    };
-
-    return (
-      <div className="space-y-8 animate-fade-in">
-        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Configuración</h2>
-
-         <div className="glass-panel p-8 rounded-3xl shadow-lg border border-white/60">
-            <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-gray-800 dark:text-white"><UserCog size={20} /> Perfil Profesional</h3>
-            <form onSubmit={handleProfessionalNameSave} className="flex flex-col md:flex-row gap-4 items-end">
-               <div className="flex-1 w-full">
-                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Nombre y Título (Visible en Portal Cliente)</label>
-                  <input 
-                    type="text" 
-                    value={professionalName}
-                    onChange={(e) => setProfessionalName(e.target.value)}
-                    className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="Ej: Lic. Gabriel Medina"
-                  />
-               </div>
-               <button type="submit" className="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-black shadow-lg">Guardar Cambios</button>
-            </form>
-         </div>
-
-         <div>
-             <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-6 rounded-3xl text-white shadow-lg mb-6">
-                <h3 className="font-bold text-lg mb-2">Configuración de Horarios (Modo DVR)</h3>
-                <p className="text-blue-100 text-sm opacity-90">
-                  Haga clic en los bloques para habilitar o deshabilitar horas de atención. Los bloques azules indican disponibilidad.
-                </p>
-              </div>
-
-            <div className="glass-panel rounded-3xl shadow-xl border border-white/60 overflow-hidden p-8">
-               <div className="flex mb-6">
-                  <div className="w-28 shrink-0"></div>
-                  <div className="flex-1 flex justify-between text-xs text-gray-400 font-bold uppercase tracking-wider">
-                    {hours.map(h => <div key={h} className="w-full text-center">{h}</div>)}
-                  </div>
-               </div>
-               
-               <div className="space-y-3">
-                {days.map((dayName, dayIndex) => {
-                  const config = schedule.find(s => s.dayOfWeek === dayIndex) || { dayOfWeek: dayIndex, isEnabled: false, activeHours: [] };
-                  const activeHours = config.activeHours || [];
-
-                  return (
-                    <div key={dayIndex} className="flex items-center h-12">
-                       <div className="w-28 shrink-0 font-bold text-gray-700 dark:text-gray-300 text-sm">{dayName}</div>
-                       <div className="flex-1 grid grid-cols-15 gap-1.5 h-full">
-                          {hours.map(hour => {
-                            const isActive = activeHours.includes(hour);
-                            return (
-                              <div 
-                                 key={hour}
-                                 onClick={() => toggleHour(dayIndex, hour)}
-                                 className={`rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-110 ${isActive ? 'bg-gradient-to-b from-blue-500 to-blue-600 shadow-md shadow-blue-500/30' : 'bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
-                                 title={`${dayName} ${hour}:00`}
-                                 style={{ flex: 1 }}
-                              />
-                            )
-                          })}
-                       </div>
-                    </div>
-                  );
-                })}
-               </div>
-               <style>{`.grid-cols-15 { display: grid; grid-template-columns: repeat(15, minmax(0, 1fr)); }`}</style>
-            </div>
-         </div>
-      </div>
-    );
-  };
-
-  if (loading) return (
-    <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-    </div>
-  );
 
   return (
     <div className={isDarkMode ? 'dark' : ''}>
