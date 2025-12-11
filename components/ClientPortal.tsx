@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, Clock, Check, User, ChevronRight, ChevronLeft, AlertCircle, Search, CalendarCheck, Sparkles, MapPin, Briefcase } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Check, User, ChevronRight, ChevronLeft, AlertCircle, Search, CalendarCheck, Sparkles, MapPin, Briefcase, CreditCard } from 'lucide-react';
 import { DataService } from '../services/dataService';
 import { AppointmentStatus, PaymentMethod, PaymentStatus, Appointment } from '../types';
 
@@ -17,7 +17,7 @@ export const ClientPortal: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [slots, setSlots] = useState<string[]>([]);
-  const [formData, setFormData] = useState({ name: '', phone: '', notes: '' });
+  const [formData, setFormData] = useState({ name: '', phone: '', dni: '', notes: '' }); // AGREGADO DNI
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [isHoliday, setIsHoliday] = useState(false);
@@ -52,7 +52,7 @@ export const ClientPortal: React.FC = () => {
   };
 
   const loadSlots = async (date: string) => {
-    setSlots([]); // clear old
+    setSlots([]); 
     const available = await DataService.getAvailableSlots(date);
     setSlots(available);
   };
@@ -66,21 +66,58 @@ export const ClientPortal: React.FC = () => {
     e.preventDefault();
     setIsSubmitting(true);
     
-    await DataService.addAppointment({
-      patientId: 'web-' + Date.now(),
-      patientName: formData.name,
-      patientPhone: formData.phone,
-      date: selectedDate,
-      time: selectedTime,
-      status: AppointmentStatus.PENDING,
-      cost: sessionPrice, // USAR PRECIO DINÁMICO
-      paymentStatus: PaymentStatus.UNPAID,
-      paymentMethod: PaymentMethod.PENDING,
-      notes: formData.notes
-    });
+    try {
+        let patientId = '';
+        
+        // 1. Buscar si el paciente ya existe por DNI
+        if (formData.dni) {
+            const existingPatient = await DataService.getPatientByDni(formData.dni);
+            if (existingPatient) {
+                patientId = existingPatient.id;
+                // Opcional: Actualizar teléfono si cambió
+                if (existingPatient.phone !== formData.phone) {
+                    await DataService.savePatientProfile({ ...existingPatient, phone: formData.phone });
+                }
+            }
+        }
 
-    setIsSubmitting(false);
-    setSuccess(true);
+        // 2. Si no existe, creamos el ID y el perfil automáticamente
+        if (!patientId) {
+            patientId = 'web-' + Date.now();
+            await DataService.savePatientProfile({
+                id: patientId,
+                firstName: formData.name.split(' ')[0],
+                lastName: formData.name.split(' ').slice(1).join(' '),
+                dni: formData.dni,
+                phone: formData.phone,
+                birthDate: '',
+                insurance: '',
+                diagnosis: '',
+                notes: ''
+            });
+        }
+
+        // 3. Crear el turno asociado a ese ID
+        await DataService.addAppointment({
+          patientId: patientId,
+          patientName: formData.name,
+          patientPhone: formData.phone,
+          date: selectedDate,
+          time: selectedTime,
+          status: AppointmentStatus.PENDING,
+          cost: sessionPrice,
+          paymentStatus: PaymentStatus.UNPAID,
+          paymentMethod: PaymentMethod.PENDING,
+          notes: formData.notes
+        });
+
+        setIsSubmitting(false);
+        setSuccess(true);
+    } catch (error) {
+        console.error(error);
+        setIsSubmitting(false);
+        alert('Hubo un error al procesar la reserva.');
+    }
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -122,13 +159,11 @@ export const ClientPortal: React.FC = () => {
 
   return (
     <div className="min-h-screen relative">
-      {/* Decorative background elements */}
       <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
         <div className="absolute top-[-5%] right-[-5%] w-96 h-96 bg-blue-200/40 rounded-full mix-blend-multiply filter blur-3xl opacity-70"></div>
         <div className="absolute bottom-[-5%] left-[-5%] w-96 h-96 bg-teal-200/40 rounded-full mix-blend-multiply filter blur-3xl opacity-70"></div>
       </div>
 
-      {/* Header */}
       <header className="sticky top-4 z-20 px-4 mb-8">
         <div className="max-w-3xl mx-auto glass-panel rounded-2xl shadow-lg shadow-gray-200/50 px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -140,7 +175,6 @@ export const ClientPortal: React.FC = () => {
                 </span>
               </div>
             </div>
-            {/* Simple Tab Switcher for Desktop/Mobile */}
             <div className="flex bg-gray-100/50 p-1 rounded-xl">
                <button onClick={() => setActiveTab('book')} className={`p-2 rounded-lg transition-all ${activeTab === 'book' ? 'bg-white shadow-sm text-teal-600' : 'text-gray-400'}`}><CalendarIcon size={20}/></button>
                <button onClick={() => setActiveTab('list')} className={`p-2 rounded-lg transition-all ${activeTab === 'list' ? 'bg-white shadow-sm text-teal-600' : 'text-gray-400'}`}><Search size={20}/></button>
@@ -157,7 +191,6 @@ export const ClientPortal: React.FC = () => {
                 <p className="text-gray-500">Gestione su bienestar en simples pasos.</p>
              </div>
 
-            {/* Progress Steps */}
             <div className="flex items-center justify-center gap-4 mb-8">
                <div className={`transition-all duration-500 flex items-center gap-2 px-4 py-2 rounded-full border ${step === 1 ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-400 border-gray-200'}`}>
                   <span className="font-bold">1</span> <span className="text-sm">Fecha</span>
@@ -170,7 +203,6 @@ export const ClientPortal: React.FC = () => {
 
             <div className="glass-panel rounded-3xl shadow-xl overflow-hidden border border-white/60">
               
-              {/* Step 1: Date Selection */}
               {step === 1 && (
                 <div className="p-6 md:p-10 animate-slide-up">
                   <div className="grid md:grid-cols-2 gap-8">
@@ -247,7 +279,6 @@ export const ClientPortal: React.FC = () => {
                 </div>
               )}
 
-              {/* Step 2: Details */}
               {step === 2 && (
                 <div className="p-6 md:p-10 animate-slide-up">
                   <div className="mb-8 flex items-end justify-between border-b border-gray-100 pb-4">
@@ -280,6 +311,21 @@ export const ClientPortal: React.FC = () => {
                       </div>
 
                       <div className="group">
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 ml-1 group-focus-within:text-teal-600 transition-colors">DNI</label>
+                        <div className="relative">
+                          <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-teal-500 transition-colors" size={20} />
+                          <input 
+                            required
+                            type="number" 
+                            className="w-full pl-12 pr-4 py-4 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-teal-500 focus:bg-white outline-none transition-all"
+                            placeholder="Ej: 12345678"
+                            value={formData.dni}
+                            onChange={e => setFormData({...formData, dni: e.target.value})}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="group md:col-span-2">
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 ml-1 group-focus-within:text-teal-600 transition-colors">Teléfono</label>
                         <input 
                           required
