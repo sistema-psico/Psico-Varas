@@ -1,6 +1,19 @@
 import { Appointment, AppointmentStatus, PaymentMethod, PaymentStatus, WorkingHours, PatientProfile } from '../types';
+import { db } from '../firebase';
+import { 
+  collection, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  getDoc, 
+  setDoc,
+  query,
+  orderBy
+} from 'firebase/firestore';
 
-// Argentine Holidays 2024-2025 (Simplified List)
+// Días feriados (Se mantienen igual)
 const HOLIDAYS = [
   '2024-01-01', '2024-02-12', '2024-02-13', '2024-03-24', '2024-03-29', '2024-04-02', 
   '2024-05-01', '2024-05-25', '2024-06-17', '2024-06-20', '2024-07-09', '2024-08-17', 
@@ -8,164 +21,153 @@ const HOLIDAYS = [
   '2025-01-01', '2025-03-03', '2025-03-04', '2025-03-24' 
 ];
 
-// Initial Mock Data
+// Horarios por defecto para inicializar DB si está vacía
 const INITIAL_SCHEDULE: WorkingHours[] = [
-  { dayOfWeek: 1, isEnabled: true, activeHours: [14, 15, 16, 17, 18, 19] }, // Mon
-  { dayOfWeek: 2, isEnabled: true, activeHours: [9, 10, 11, 12, 14, 15, 16, 17] }, // Tue
-  { dayOfWeek: 3, isEnabled: false, activeHours: [] }, // Wed
-  { dayOfWeek: 4, isEnabled: true, activeHours: [9, 10, 11, 12, 14, 15, 16, 17] }, // Thu
-  { dayOfWeek: 5, isEnabled: true, activeHours: [9, 10, 11, 12, 13, 14, 15] }, // Fri
-  { dayOfWeek: 6, isEnabled: false, activeHours: [] }, // Sat
-  { dayOfWeek: 0, isEnabled: false, activeHours: [] }, // Sun
+  { dayOfWeek: 1, isEnabled: true, activeHours: [14, 15, 16, 17, 18, 19] },
+  { dayOfWeek: 2, isEnabled: true, activeHours: [9, 10, 11, 12, 14, 15, 16, 17] },
+  { dayOfWeek: 3, isEnabled: false, activeHours: [] },
+  { dayOfWeek: 4, isEnabled: true, activeHours: [9, 10, 11, 12, 14, 15, 16, 17] },
+  { dayOfWeek: 5, isEnabled: true, activeHours: [9, 10, 11, 12, 13, 14, 15] },
+  { dayOfWeek: 6, isEnabled: false, activeHours: [] },
+  { dayOfWeek: 0, isEnabled: false, activeHours: [] },
 ];
-
-const INITIAL_APPOINTMENTS: Appointment[] = [
-  {
-    id: '1',
-    patientId: 'p1',
-    patientName: 'Juan Pérez',
-    patientPhone: '1122334455',
-    date: new Date().toISOString().split('T')[0],
-    time: '15:00',
-    status: AppointmentStatus.CONFIRMED,
-    cost: 5000,
-    paymentStatus: PaymentStatus.UNPAID,
-    paymentMethod: PaymentMethod.PENDING
-  },
-  {
-    id: '2',
-    patientId: 'p2',
-    patientName: 'María García',
-    date: new Date().toISOString().split('T')[0],
-    time: '16:00',
-    status: AppointmentStatus.COMPLETED,
-    cost: 5000,
-    paymentStatus: PaymentStatus.PAID,
-    paymentMethod: PaymentMethod.CASH
-  }
-];
-
-// Local Storage Keys
-const KEYS = {
-  APPOINTMENTS: 'psico_appointments',
-  SCHEDULE: 'psico_schedule',
-  PATIENTS: 'psico_patients', // New key for profiles
-  CONFIG: 'psico_config' // New key for general config
-};
-
-// Helper to simulate delay
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const DataService = {
-  getArgentineHolidays: (): string[] => {
-    return HOLIDAYS;
-  },
+  getArgentineHolidays: (): string[] => HOLIDAYS,
 
-  isHoliday: (dateStr: string): boolean => {
-    return HOLIDAYS.includes(dateStr);
-  },
+  isHoliday: (dateStr: string): boolean => HOLIDAYS.includes(dateStr),
 
+  // --- HORARIOS (Colección: settings, Doc: schedule) ---
   getScheduleConfig: async (): Promise<WorkingHours[]> => {
-    const stored = localStorage.getItem(KEYS.SCHEDULE);
-    if (stored) return JSON.parse(stored);
-    return INITIAL_SCHEDULE;
+    try {
+      const docRef = doc(db, 'settings', 'schedule');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data().hours as WorkingHours[];
+      }
+      // Si no existe, lo creamos
+      await setDoc(docRef, { hours: INITIAL_SCHEDULE });
+      return INITIAL_SCHEDULE;
+    } catch (e) {
+      console.error("Error fetching schedule:", e);
+      return INITIAL_SCHEDULE;
+    }
   },
 
   saveScheduleConfig: async (schedule: WorkingHours[]): Promise<void> => {
-    localStorage.setItem(KEYS.SCHEDULE, JSON.stringify(schedule));
+    await setDoc(doc(db, 'settings', 'schedule'), { hours: schedule });
   },
 
+  // --- TURNOS (Colección: appointments) ---
   getAppointments: async (): Promise<Appointment[]> => {
-    const stored = localStorage.getItem(KEYS.APPOINTMENTS);
-    if (stored) return JSON.parse(stored);
-    return INITIAL_APPOINTMENTS;
+    try {
+      const q = query(collection(db, 'appointments')); // Podrías agregar orderBy aquí
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
+    } catch (e) {
+      console.error("Error getting appointments:", e);
+      return [];
+    }
   },
 
   addAppointment: async (appt: Omit<Appointment, 'id'>): Promise<Appointment> => {
-    await delay(500); // Simulate network
-    const appointments = await DataService.getAppointments();
-    const newAppt: Appointment = {
-      ...appt,
-      id: Math.random().toString(36).substr(2, 9)
-    };
-    appointments.push(newAppt);
-    localStorage.setItem(KEYS.APPOINTMENTS, JSON.stringify(appointments));
-    return newAppt;
+    try {
+      const docRef = await addDoc(collection(db, 'appointments'), appt);
+      return { id: docRef.id, ...appt };
+    } catch (e) {
+      console.error("Error adding appointment:", e);
+      throw e;
+    }
   },
 
   updateAppointment: async (id: string, updates: Partial<Appointment>): Promise<Appointment[]> => {
-    const appointments = await DataService.getAppointments();
-    const index = appointments.findIndex(a => a.id === id);
-    if (index !== -1) {
-      appointments[index] = { ...appointments[index], ...updates };
-      localStorage.setItem(KEYS.APPOINTMENTS, JSON.stringify(appointments));
+    try {
+      const apptRef = doc(db, 'appointments', id);
+      await updateDoc(apptRef, updates);
+      return await DataService.getAppointments(); // Return fresh list
+    } catch (e) {
+      console.error("Error updating appointment:", e);
+      return [];
     }
-    return appointments;
   },
 
   deleteAppointment: async (id: string): Promise<Appointment[]> => {
-    const appointments = await DataService.getAppointments();
-    const filtered = appointments.filter(a => a.id !== id);
-    localStorage.setItem(KEYS.APPOINTMENTS, JSON.stringify(filtered));
-    return filtered;
+    try {
+      await deleteDoc(doc(db, 'appointments', id));
+      return await DataService.getAppointments();
+    } catch (e) {
+      console.error("Error deleting appointment:", e);
+      return [];
+    }
   },
 
-  // Patient Profile Management
+  // --- PERFILES PACIENTES (Colección: patients) ---
   getPatientProfile: async (id: string): Promise<PatientProfile | null> => {
-    const stored = localStorage.getItem(KEYS.PATIENTS);
-    const profiles: Record<string, PatientProfile> = stored ? JSON.parse(stored) : {};
-    return profiles[id] || null;
+    try {
+      // Usamos el ID del paciente como ID del documento para búsqueda rápida
+      const docRef = doc(db, 'patients', id);
+      const docSnap = await getDoc(docRef);
+      return docSnap.exists() ? ({ id: docSnap.id, ...docSnap.data() } as PatientProfile) : null;
+    } catch (e) {
+      console.error("Error fetching patient:", e);
+      return null;
+    }
   },
 
   getAllPatientProfiles: async (): Promise<Record<string, PatientProfile>> => {
-    const stored = localStorage.getItem(KEYS.PATIENTS);
-    return stored ? JSON.parse(stored) : {};
+    try {
+      const querySnapshot = await getDocs(collection(db, 'patients'));
+      const profiles: Record<string, PatientProfile> = {};
+      querySnapshot.forEach(doc => {
+        profiles[doc.id] = { id: doc.id, ...doc.data() } as PatientProfile;
+      });
+      return profiles;
+    } catch (e) {
+      console.error("Error fetching profiles:", e);
+      return {};
+    }
   },
 
   savePatientProfile: async (profile: PatientProfile): Promise<void> => {
-    const stored = localStorage.getItem(KEYS.PATIENTS);
-    const profiles: Record<string, PatientProfile> = stored ? JSON.parse(stored) : {};
-    profiles[profile.id] = profile;
-    localStorage.setItem(KEYS.PATIENTS, JSON.stringify(profiles));
+    // Guardamos usando el ID del paciente como clave
+    await setDoc(doc(db, 'patients', profile.id), profile);
   },
 
-  // General Configuration (Professional Name)
+  // --- CONFIGURACIÓN GENERAL (Colección: settings, Doc: profile) ---
   getProfessionalName: async (): Promise<string> => {
-    const stored = localStorage.getItem(KEYS.CONFIG);
-    if (stored) {
-      const config = JSON.parse(stored);
-      return config.professionalName || 'Lic. Gabriel Medina';
+    try {
+      const docRef = doc(db, 'settings', 'profile');
+      const docSnap = await getDoc(docRef);
+      return docSnap.exists() ? docSnap.data().professionalName : 'Lic. Gabriel Medina';
+    } catch (e) {
+      return 'Lic. Gabriel Medina';
     }
-    return 'Lic. Gabriel Medina';
   },
 
   saveProfessionalName: async (name: string): Promise<void> => {
-    const stored = localStorage.getItem(KEYS.CONFIG);
-    const config = stored ? JSON.parse(stored) : {};
-    config.professionalName = name;
-    localStorage.setItem(KEYS.CONFIG, JSON.stringify(config));
+    await setDoc(doc(db, 'settings', 'profile'), { professionalName: name }, { merge: true });
   },
 
-  // Logic to generate available slots based on configuration
+  // --- LÓGICA DE TURNOS DISPONIBLES ---
   getAvailableSlots: async (dateStr: string): Promise<string[]> => {
     if (DataService.isHoliday(dateStr)) return [];
 
     const date = new Date(dateStr + 'T00:00:00');
     const dayOfWeek = date.getDay();
+    
+    // Obtenemos configuración desde Firebase
     const schedule = await DataService.getScheduleConfig();
     const config = schedule.find(s => s.dayOfWeek === dayOfWeek);
 
     if (!config || !config.isEnabled) return [];
 
-    // Fetch existing appointments for that day to exclude them
+    // Obtenemos turnos existentes desde Firebase
     const allAppointments = await DataService.getAppointments();
     const takenTimes = allAppointments
       .filter(a => a.date === dateStr && a.status !== AppointmentStatus.CANCELLED)
       .map(a => a.time);
 
     const slots: string[] = [];
-    
-    // Sort active hours to ensure order
     const sortedHours = (config.activeHours || []).sort((a,b) => a - b);
 
     for (const hour of sortedHours) {
