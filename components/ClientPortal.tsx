@@ -8,6 +8,8 @@ export const ClientPortal: React.FC = () => {
   
   // Professional Data
   const [professionalName, setProfessionalName] = useState('Lic. Gabriel Medina');
+  const [professionalSpecialty, setProfessionalSpecialty] = useState('Psicología Clínica');
+  const [professionalAddress, setProfessionalAddress] = useState('Av. Corrientes 1234, Piso 5, CABA');
 
   // Booking State
   const [step, setStep] = useState(1);
@@ -41,8 +43,10 @@ export const ClientPortal: React.FC = () => {
   }, [selectedDate]);
 
   const loadData = async () => {
-      const name = await DataService.getProfessionalName(); // CORREGIDO
-      setProfessionalName(name);
+      const data = await DataService.getProfessionalProfile();
+      setProfessionalName(data.name);
+      setProfessionalSpecialty(data.specialty);
+      setProfessionalAddress(data.address);
   };
 
   const loadSlots = async (date: string) => {
@@ -129,7 +133,7 @@ export const ClientPortal: React.FC = () => {
               <div className="w-10 h-10 bg-gradient-to-tr from-teal-500 to-emerald-400 rounded-xl flex items-center justify-center text-white font-bold shadow-md shadow-teal-500/20">{professionalName.charAt(0) || 'P'}</div>
               <div>
                 <span className="font-bold text-gray-800 block leading-tight">{professionalName}</span>
-                <span className="text-xs text-gray-500 font-medium">Psicología Clínica</span>
+                <span className="text-xs text-gray-500 font-medium">{professionalSpecialty}</span>
               </div>
             </div>
             {/* Simple Tab Switcher for Desktop/Mobile */}
@@ -183,7 +187,7 @@ export const ClientPortal: React.FC = () => {
                               <div className="p-2 bg-blue-100 rounded-lg text-blue-600"><MapPin size={18}/></div>
                               <div>
                                 <h4 className="font-bold text-blue-900 text-sm">Consultorio Central</h4>
-                                <p className="text-xs text-blue-700/80 mt-1">Av. Corrientes 1234, Piso 5<br/>CABA, Argentina</p>
+                                <p className="text-xs text-blue-700/80 mt-1">{professionalAddress}</p>
                               </div>
                            </div>
                         </div>
