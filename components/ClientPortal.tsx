@@ -1,17 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar as CalendarIcon, Clock, Check, User, ChevronRight, ChevronLeft, AlertCircle, Search, CalendarCheck, Sparkles, MapPin } from 'lucide-react';
 import { DataService } from '../services/dataService';
-import { AppointmentStatus, PaymentMethod, PaymentStatus, Appointment, ProfessionalConfig } from '../types';
+import { AppointmentStatus, PaymentMethod, PaymentStatus, Appointment } from '../types';
 
 export const ClientPortal: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'book' | 'list'>('book');
   
   // Professional Data
-  const [professionalConfig, setProfessionalConfig] = useState<ProfessionalConfig>({
-    name: 'Lic. Gabriel Medina',
-    specialty: 'Psicología Clínica',
-    address: 'Av. Corrientes 1234, Piso 5, CABA'
-  });
+  const [professionalName, setProfessionalName] = useState('Lic. Gabriel Medina');
 
   // Booking State
   const [step, setStep] = useState(1);
@@ -45,8 +41,8 @@ export const ClientPortal: React.FC = () => {
   }, [selectedDate]);
 
   const loadData = async () => {
-      const config = await DataService.getProfessionalConfig();
-      setProfessionalConfig(config);
+      const name = await DataService.getProfessionalName(); // CORREGIDO
+      setProfessionalName(name);
   };
 
   const loadSlots = async (date: string) => {
@@ -130,10 +126,10 @@ export const ClientPortal: React.FC = () => {
       <header className="sticky top-4 z-20 px-4 mb-8">
         <div className="max-w-3xl mx-auto glass-panel rounded-2xl shadow-lg shadow-gray-200/50 px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-tr from-teal-500 to-emerald-400 rounded-xl flex items-center justify-center text-white font-bold shadow-md shadow-teal-500/20">{professionalConfig.name.charAt(0) || 'P'}</div>
+              <div className="w-10 h-10 bg-gradient-to-tr from-teal-500 to-emerald-400 rounded-xl flex items-center justify-center text-white font-bold shadow-md shadow-teal-500/20">{professionalName.charAt(0) || 'P'}</div>
               <div>
-                <span className="font-bold text-gray-800 block leading-tight">{professionalConfig.name}</span>
-                <span className="text-xs text-gray-500 font-medium">{professionalConfig.specialty}</span>
+                <span className="font-bold text-gray-800 block leading-tight">{professionalName}</span>
+                <span className="text-xs text-gray-500 font-medium">Psicología Clínica</span>
               </div>
             </div>
             {/* Simple Tab Switcher for Desktop/Mobile */}
@@ -187,7 +183,7 @@ export const ClientPortal: React.FC = () => {
                               <div className="p-2 bg-blue-100 rounded-lg text-blue-600"><MapPin size={18}/></div>
                               <div>
                                 <h4 className="font-bold text-blue-900 text-sm">Consultorio Central</h4>
-                                <p className="text-xs text-blue-700/80 mt-1">{professionalConfig.address}<br/>Argentina</p>
+                                <p className="text-xs text-blue-700/80 mt-1">Av. Corrientes 1234, Piso 5<br/>CABA, Argentina</p>
                               </div>
                            </div>
                         </div>
