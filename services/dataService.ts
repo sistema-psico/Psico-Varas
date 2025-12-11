@@ -128,6 +128,8 @@ export const DataService = {
   },
 
   // --- CONFIGURACIÓN GENERAL ---
+  
+  // Función estándar que usa el nuevo sistema
   getProfessionalName: async (): Promise<string> => {
     try {
       const docRef = doc(db, 'settings', 'profile');
@@ -141,6 +143,19 @@ export const DataService = {
   saveProfessionalName: async (name: string): Promise<void> => {
     await setDoc(doc(db, 'settings', 'profile'), { professionalName: name }, { merge: true });
   },
+
+  // --- ALIAS DE COMPATIBILIDAD (AQUÍ ESTÁ LA SOLUCIÓN) ---
+  // Estas funciones redirigen las llamadas "viejas" a las nuevas funciones de Firebase
+  getProfessionalConfig: async (): Promise<string> => {
+    return await DataService.getProfessionalName();
+  },
+
+  saveProfessionalConfig: async (data: any): Promise<void> => {
+    // Maneja si le pasan un string directo o un objeto
+    const name = typeof data === 'string' ? data : data?.professionalName || 'Lic. Gabriel Medina';
+    await DataService.saveProfessionalName(name);
+  },
+  // -------------------------------------------------------
 
   // --- LÓGICA DE TURNOS ---
   getAvailableSlots: async (dateStr: string): Promise<string[]> => {
