@@ -28,7 +28,9 @@ import {
   Trash2,
   UserCog,
   MapPin,
-  Briefcase
+  Briefcase,
+  ClipboardList,
+  Activity
 } from 'lucide-react';
 import { Appointment, AppointmentStatus, PaymentMethod, PaymentStatus, WorkingHours, PatientProfile } from '../types';
 import { DataService } from '../services/dataService';
@@ -58,26 +60,27 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
   const [allProfiles, setAllProfiles] = useState<Record<string, PatientProfile>>({});
 
-  // Filter State
+  // Filter State for Calendar
   const [filterDate, setFilterDate] = useState<string | null>(null);
 
-  // Dark Mode
+  // Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // Manual Booking
+  // Manual Booking State
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualForm, setManualForm] = useState({ name: '', date: '', time: '', phone: '' });
 
-  // Edit Appointment
+  // Edit Appointment State
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
 
-  // Payment Processing
+  // Payment Processing State
   const [paymentAppointment, setPaymentAppointment] = useState<Appointment | null>(null);
 
-  // Patient Detail
+  // Patient Detail State
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
-  const [isProfileExpanded, setIsProfileExpanded] = useState(true);
+  const [isProfileExpanded, setIsProfileExpanded] = useState(false); // Collapsed by default to save space
+  const [patientTab, setPatientTab] = useState<'overview' | 'history'>('overview'); // NEW: Tab state for patient view
   
   // Note State
   const [unsavedNotes, setUnsavedNotes] = useState<Set<string>>(new Set());
@@ -215,7 +218,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const handlePatientSelect = async (patientId: string, name: string) => {
     setSelectedPatientId(patientId);
     setAiSummary('');
-    setIsProfileExpanded(true);
+    setIsProfileExpanded(false); // Start collapsed
+    setPatientTab('overview'); // Reset to overview tab
     const existing = await DataService.getPatientProfile(patientId);
     setPatientProfile(existing || {
       id: patientId,
@@ -234,7 +238,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     const newId = 'manual-' + Date.now();
     setSelectedPatientId(newId);
     setAiSummary('');
-    setIsProfileExpanded(true);
+    setIsProfileExpanded(true); // Expand form for new patient
+    setPatientTab('overview');
     setPatientProfile({
       id: newId,
       firstName: '',
@@ -276,7 +281,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     setAiSummary('');
 
     try {
-      // CORRECCIÓN CLAVE: Usamos VITE_GEMINI_API_KEY
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       
       if (!apiKey) {
@@ -319,7 +323,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
 
     } catch (error: any) {
       console.error("Error generating summary", error);
-      setAiSummary("Error: Verifique la API Key en Vercel (VITE_GEMINI_API_KEY) o la conexión.");
+      setAiSummary("Error: Verifique la API Key o la conexión.");
     } finally {
       setIsGeneratingAi(false);
     }
@@ -520,6 +524,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         };
       });
     
+    // Add manually created patients that might not have appointments yet
     Object.values(allProfiles).forEach(profile => {
       if (!uniquePatients.find(p => p.id === profile.id)) {
         uniquePatients.push({
@@ -561,6 +566,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Ficha: <span className="text-primary-600 dark:text-primary-400">{patientData.name.trim() || 'Nuevo Paciente'}</span></h2>
            </div>
 
+           {/* Personal Data Form - Collapsible */}
            <div className="glass-panel rounded-3xl shadow-sm border border-white/60 overflow-hidden">
               <div 
                 className="flex items-center justify-between p-6 cursor-pointer hover:bg-white/40 dark:hover:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700 transition-colors"
@@ -619,12 +625,106 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               )}
            </div>
 
-           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 space-y-6">
-                
-                 {/* Clinical History */}
-                 <div className="space-y-4">
-                   <h3 className="font-bold text-gray-800 dark:text-gray-100 text-xl">Historia Clínica</h3>
+           {/* PATIENT TABS NAVIGATION */}
+           <div className="flex space-x-2 border-b border-gray-200 dark:border-gray-700 mb-6">
+              <button 
+                onClick={() => setPatientTab('overview')}
+                className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${patientTab === 'overview' ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+              >
+                <Activity size={16} /> Resumen
+              </button>
+              <button 
+                onClick={() => setPatientTab('history')}
+                className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${patientTab === 'history' ? 'border-primary-600 text-primary-600 dark:text-primary-400 dark:border-primary-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}
+              >
+                <ClipboardList size={16} /> Historia Clínica Completa
+              </button>
+           </div>
+
+           {/* TAB CONTENT */}
+           {patientTab === 'overview' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
+                  {/* AI Summary Widget */}
+                  <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-3xl shadow-xl text-white relative overflow-hidden group h-fit">
+                      <div className="absolute top-[-20%] right-[-20%] w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+                      <div className="relative z-10">
+                          <div className="flex items-center gap-2 mb-4 font-bold text-indigo-100"><BrainCircuit size={20} /> <h3>Resumen IA</h3></div>
+                          {!aiSummary ? (
+                            <button onClick={() => generateAiSummary(patientData.name, patientData.appointments)} disabled={isGeneratingAi} className="w-full bg-white/20 hover:bg-white/30 backdrop-blur-md text-white border border-white/20 py-3 rounded-xl text-sm font-bold shadow-lg transition-all disabled:opacity-50">{isGeneratingAi ? 'Analizando...' : 'Generar Resumen'}</button>
+                          ) : (
+                            <div className="bg-white/10 backdrop-blur-md border border-white/10 p-4 rounded-2xl text-xs text-indigo-50 max-h-60 overflow-y-auto leading-relaxed custom-scrollbar"><div dangerouslySetInnerHTML={{ __html: aiSummary.replace(/\n/g, '<br/>') }} /></div>
+                          )}
+                      </div>
+                  </div>
+
+                  {/* Chronology Widget */}
+                  <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 h-fit">
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2"><Clock size={18} /> Cronología</h3>
+                        <button 
+                            onClick={() => {
+                                const phone = 'phone' in patientData ? (patientData as any).phone : ''; 
+                                setManualForm({ 
+                                    name: patientData.name, 
+                                    phone: phone || '', 
+                                    date: '', 
+                                    time: '' 
+                                });
+                                setShowManualModal(true);
+                            }}
+                            className="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-md hover:bg-black dark:hover:bg-gray-200"
+                        >
+                            <Plus size={14} /> Nuevo Turno
+                        </button>
+                      </div>
+                      <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                        {sortedHistory.slice(0, 5).map(appt => { // Show only recent 5 in summary
+                            const isFuture = new Date(appt.date + 'T' + appt.time) > new Date();
+                            return (
+                            <div key={appt.id} className={`flex items-center justify-between p-3 rounded-xl border transition-all hover:scale-[1.02] ${isFuture ? 'bg-blue-50/50 border-blue-100 dark:bg-blue-900/20 dark:border-blue-900' : 'bg-white/40 border-gray-100 dark:bg-gray-700/30 dark:border-gray-700'}`}>
+                              <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-gray-700 dark:text-gray-300">{appt.date}</span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">{appt.time}hs</span>
+                                  </div>
+                                  {isFuture && <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wide">Próximo</span>}
+                              </div>
+                              <span className={`w-2 h-2 rounded-full ${
+                                  appt.status === AppointmentStatus.CONFIRMED ? 'bg-blue-500' :
+                                  appt.status === AppointmentStatus.COMPLETED ? 'bg-green-500' :
+                                  appt.status === AppointmentStatus.CANCELLED ? 'bg-red-500' :
+                                  'bg-gray-400'
+                              }`}></span>
+                            </div>
+                        )})}
+                        {sortedHistory.length > 5 && <p className="text-xs text-center text-gray-400 pt-2">Ver todo en "Historia Clínica"</p>}
+                      </div>
+                  </div>
+
+                  {/* Payment History Table Widget */}
+                  <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 md:col-span-2">
+                      <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2"><DollarSign size={18} /> Pagos</h3>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left">
+                          <thead>
+                            <tr className="border-b dark:border-gray-700 text-gray-500 dark:text-gray-400"><th className="pb-2">Fecha</th><th className="pb-2">Método</th><th className="pb-2 text-right">Monto</th></tr>
+                          </thead>
+                          <tbody className="divide-y dark:divide-gray-700 text-gray-700 dark:text-gray-300">
+                            {paymentHistory.slice(0, 5).map(p => (
+                              <tr key={p.id}><td className="py-2">{p.date}</td><td className="py-2">{p.paymentMethod}</td><td className="py-2 text-right font-bold">${p.cost}</td></tr>
+                            ))}
+                            {paymentHistory.length === 0 && <tr><td colSpan={3} className="py-4 text-center text-gray-400">Sin pagos registrados</td></tr>}
+                          </tbody>
+                        </table>
+                      </div>
+                  </div>
+              </div>
+           )}
+
+           {/* FULL HISTORY TAB */}
+           {patientTab === 'history' && (
+              <div className="space-y-4 animate-fade-in">
+                   <h3 className="font-bold text-gray-800 dark:text-gray-100 text-xl flex items-center gap-2"><ClipboardList className="text-primary-500" /> Registro Completo de Sesiones</h3>
                    {sortedHistory.length === 0 ? (
                      <div className="text-center py-8 text-gray-400 bg-white/30 dark:bg-gray-800/30 rounded-2xl border border-white/50">No hay turnos previos para mostrar historia clínica.</div>
                    ) : (
@@ -637,7 +737,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                             <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wide border ${appt.status === AppointmentStatus.COMPLETED ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 border-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>{appt.status}</span>
                             </div>
                             
-                            {/* MOSTRAR MOTIVO DE CONSULTA SI EXISTE */}
+                            {/* MOSTRAR MOTIVO DE CONSULTA */}
                             {appt.notes && (
                               <div className="mb-3 p-3 bg-blue-50/50 dark:bg-blue-900/20 rounded-xl text-sm text-gray-700 dark:text-gray-300 border border-blue-100 dark:border-blue-800">
                                  <span className="font-bold text-blue-700 dark:text-blue-400 block mb-1">Motivo de consulta:</span>
@@ -669,85 +769,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                         </div>
                     )})
                    )}
-                 </div>
               </div>
-
-              <div className="lg:col-span-1 space-y-6">
-                 {/* Appointment History List */}
-                 <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60">
-                    <div className="flex justify-between items-center mb-4">
-                       <h3 className="font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2"><Clock size={18} /> Cronología</h3>
-                       <button 
-                          onClick={() => {
-                              const phone = 'phone' in patientData ? (patientData as any).phone : ''; 
-                              setManualForm({ 
-                                  name: patientData.name, 
-                                  phone: phone || '', 
-                                  date: '', 
-                                  time: '' 
-                              });
-                              setShowManualModal(true);
-                          }}
-                          className="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-md hover:bg-black dark:hover:bg-gray-200"
-                       >
-                          <Plus size={14} /> Nuevo Turno
-                       </button>
-                    </div>
-                    <div className="space-y-3 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
-                       {sortedHistory.map(appt => {
-                          const isFuture = new Date(appt.date + 'T' + appt.time) > new Date();
-                          return (
-                          <div key={appt.id} className={`flex items-center justify-between p-3 rounded-xl border transition-all hover:scale-[1.02] ${isFuture ? 'bg-blue-50/50 border-blue-100 dark:bg-blue-900/20 dark:border-blue-900' : 'bg-white/40 border-gray-100 dark:bg-gray-700/30 dark:border-gray-700'}`}>
-                             <div>
-                                <div className="flex items-center gap-2">
-                                   <span className="text-xs font-bold text-gray-700 dark:text-gray-300">{appt.date}</span>
-                                   <span className="text-xs text-gray-500 dark:text-gray-400">{appt.time}hs</span>
-                                </div>
-                                {isFuture && <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wide">Próximo</span>}
-                             </div>
-                             <span className={`w-2 h-2 rounded-full ${
-                                appt.status === AppointmentStatus.CONFIRMED ? 'bg-blue-500' :
-                                appt.status === AppointmentStatus.COMPLETED ? 'bg-green-500' :
-                                appt.status === AppointmentStatus.CANCELLED ? 'bg-red-500' :
-                                'bg-gray-400'
-                             }`}></span>
-                          </div>
-                       )})}
-                    </div>
-                 </div>
-
-                 {/* AI Summary */}
-                 <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-3xl shadow-xl text-white relative overflow-hidden group">
-                    <div className="absolute top-[-20%] right-[-20%] w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
-                    <div className="relative z-10">
-                        <div className="flex items-center gap-2 mb-4 font-bold text-indigo-100"><BrainCircuit size={20} /> <h3>Resumen IA</h3></div>
-                        {!aiSummary ? (
-                           <button onClick={() => generateAiSummary(patientData.name, patientData.appointments)} disabled={isGeneratingAi} className="w-full bg-white/20 hover:bg-white/30 backdrop-blur-md text-white border border-white/20 py-3 rounded-xl text-sm font-bold shadow-lg transition-all disabled:opacity-50">{isGeneratingAi ? 'Analizando...' : 'Generar Resumen'}</button>
-                        ) : (
-                           <div className="bg-white/10 backdrop-blur-md border border-white/10 p-4 rounded-2xl text-xs text-indigo-50 max-h-60 overflow-y-auto leading-relaxed custom-scrollbar"><div dangerouslySetInnerHTML={{ __html: aiSummary.replace(/\n/g, '<br/>') }} /></div>
-                        )}
-                    </div>
-                 </div>
-
-                 {/* Payment History Table */}
-                 <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60">
-                    <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2"><DollarSign size={18} /> Pagos</h3>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs text-left">
-                        <thead>
-                          <tr className="border-b dark:border-gray-700 text-gray-500 dark:text-gray-400"><th className="pb-2">Fecha</th><th className="pb-2">Método</th><th className="pb-2 text-right">Monto</th></tr>
-                        </thead>
-                        <tbody className="divide-y dark:divide-gray-700 text-gray-700 dark:text-gray-300">
-                          {paymentHistory.map(p => (
-                            <tr key={p.id}><td className="py-2">{p.date}</td><td className="py-2">{p.paymentMethod}</td><td className="py-2 text-right font-bold">${p.cost}</td></tr>
-                          ))}
-                          {paymentHistory.length === 0 && <tr><td colSpan={3} className="py-4 text-center text-gray-400">Sin pagos registrados</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
-                 </div>
-              </div>
-           </div>
+           )}
         </div>
       );
     }
@@ -1218,3 +1241,5 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     </div>
   );
 };
+
+}
