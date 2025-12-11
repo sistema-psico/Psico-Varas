@@ -1,5 +1,5 @@
 export const PROJECT_STATUS = {
-  // --- INTERRUPTOR PRINCIPAL (KILL SWITCH) ---
+  // --- INTERRUPTOR PRINCIPAL ---
   // true = El software funciona correctamente
   // false = Muestra la pantalla de "Servicio Suspendido"
   isActive: true, 
