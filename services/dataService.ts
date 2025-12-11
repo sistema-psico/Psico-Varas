@@ -165,6 +165,12 @@ export const DataService = {
     await setDoc(doc(db, 'settings', 'profile'), profile, { merge: true });
   },
 
+  // Alias de compatibilidad
+  getProfessionalName: async (): Promise<string> => {
+    const p = await DataService.getProfessionalProfile();
+    return p.name;
+  },
+
   // --- LÓGICA DE TURNOS ---
   getAvailableSlots: async (dateStr: string): Promise<string[]> => {
     if (DataService.isHoliday(dateStr)) return [];
