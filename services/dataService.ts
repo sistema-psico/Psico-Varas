@@ -33,7 +33,7 @@ export interface ProfessionalProfile {
   name: string;
   specialty: string;
   address: string;
-  price: number; // NUEVO CAMPO
+  price: number;
 }
 
 export const DataService = {
@@ -134,8 +134,17 @@ export const DataService = {
     await setDoc(doc(db, 'patients', profile.id), profile);
   },
 
-  // --- CONFIGURACIÓN GENERAL (PERFIL PROFESIONAL) ---
-  
+  // --- NUEVA FUNCIÓN PARA ELIMINAR PACIENTE ---
+  deletePatientProfile: async (id: string): Promise<void> => {
+    try {
+      await deleteDoc(doc(db, 'patients', id));
+    } catch (e) {
+      console.error("Error deleting patient profile:", e);
+      throw e;
+    }
+  },
+
+  // --- CONFIGURACIÓN GENERAL ---
   getProfessionalProfile: async (): Promise<ProfessionalProfile> => {
     try {
       const docRef = doc(db, 'settings', 'profile');
@@ -146,7 +155,7 @@ export const DataService = {
           name: data.name || 'Lic. Gabriel Medina',
           specialty: data.specialty || 'Psicología Clínica',
           address: data.address || 'Av. Corrientes 1234, Piso 5, CABA',
-          price: data.price || 5000 // Precio por defecto si no existe
+          price: data.price || 5000
         };
       }
       return {
