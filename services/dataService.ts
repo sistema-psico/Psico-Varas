@@ -33,6 +33,7 @@ export interface ProfessionalProfile {
   name: string;
   specialty: string;
   address: string;
+  price: number; // NUEVO CAMPO
 }
 
 export const DataService = {
@@ -144,19 +145,22 @@ export const DataService = {
         return {
           name: data.name || 'Lic. Gabriel Medina',
           specialty: data.specialty || 'Psicología Clínica',
-          address: data.address || 'Av. Corrientes 1234, Piso 5, CABA'
+          address: data.address || 'Av. Corrientes 1234, Piso 5, CABA',
+          price: data.price || 5000 // Precio por defecto si no existe
         };
       }
       return {
         name: 'Lic. Gabriel Medina',
         specialty: 'Psicología Clínica',
-        address: 'Av. Corrientes 1234, Piso 5, CABA'
+        address: 'Av. Corrientes 1234, Piso 5, CABA',
+        price: 5000
       };
     } catch (e) {
       return {
         name: 'Lic. Gabriel Medina',
         specialty: 'Psicología Clínica',
-        address: 'Av. Corrientes 1234, Piso 5, CABA'
+        address: 'Av. Corrientes 1234, Piso 5, CABA',
+        price: 5000
       };
     }
   },
