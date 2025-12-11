@@ -48,7 +48,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const [schedule, setSchedule] = useState<WorkingHours[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Configuration State
+  // Configuration State (Extended)
   const [professionalName, setProfessionalName] = useState('');
   const [professionalSpecialty, setProfessionalSpecialty] = useState('');
   const [professionalAddress, setProfessionalAddress] = useState('');
@@ -58,23 +58,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
   const [allProfiles, setAllProfiles] = useState<Record<string, PatientProfile>>({});
 
-  // Filter State
+  // Filter State for Calendar
   const [filterDate, setFilterDate] = useState<string | null>(null);
 
-  // Dark Mode
+  // Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // Manual Booking
+  // Manual Booking State
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualForm, setManualForm] = useState({ name: '', date: '', time: '', phone: '' });
 
-  // Edit Appointment
+  // Edit Appointment State
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
 
-  // Payment Processing
+  // Payment Processing State
   const [paymentAppointment, setPaymentAppointment] = useState<Appointment | null>(null);
 
-  // Patient Detail
+  // Patient Detail State
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
   const [isProfileExpanded, setIsProfileExpanded] = useState(true);
@@ -222,6 +222,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       firstName: name.split(' ')[0],
       lastName: name.split(' ').slice(1).join(' '),
       dni: '',
+      phone: '', // Default empty if not exists
       birthDate: '',
       insurance: '',
       diagnosis: '',
@@ -239,6 +240,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       firstName: '',
       lastName: '',
       dni: '',
+      phone: '',
       birthDate: '',
       insurance: '',
       diagnosis: '',
@@ -250,7 +252,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     if (window.confirm('¿Eliminar definitivamente a este paciente? Se perderán sus datos de perfil (los turnos históricos se mantendrán).')) {
       await DataService.deletePatientProfile(id);
       
-      // Update local state
       const newProfiles = { ...allProfiles };
       delete newProfiles[id];
       setAllProfiles(newProfiles);
@@ -519,7 +520,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         uniquePatients.push({
           id: profile.id,
           name: `${profile.firstName} ${profile.lastName}`,
-          phone: '',
+          phone: profile.phone || '',
           totalVisits: 0,
           lastVisit: undefined,
           appointments: []
@@ -584,6 +585,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                        <input type="text" className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" value={patientProfile.dni} onChange={e => setPatientProfile({...patientProfile!, dni: e.target.value})} />
                     </div>
                     <div>
+                       <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase ml-1 mb-1 block">Teléfono</label>
+                       <input type="tel" className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" value={patientProfile.phone} onChange={e => setPatientProfile({...patientProfile!, phone: e.target.value})} />
+                    </div>
+                    <div>
                        <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase ml-1 mb-1 block">Fecha Nacimiento</label>
                        <input type="date" className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" value={patientProfile.birthDate} onChange={e => setPatientProfile({...patientProfile!, birthDate: e.target.value})} />
                     </div>
@@ -629,6 +634,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                             <span className="font-bold text-gray-900 dark:text-white">{appt.date} <span className="text-gray-400 font-light mx-1">|</span> {appt.time} hs</span>
                             <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wide border ${appt.status === AppointmentStatus.COMPLETED ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 border-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>{appt.status}</span>
                             </div>
+                            
+                            {/* MOSTRAR MOTIVO DE CONSULTA SI EXISTE */}
+                            {appt.notes && (
+                              <div className="mb-3 p-3 bg-blue-50/50 dark:bg-blue-900/20 rounded-xl text-sm text-gray-700 dark:text-gray-300 border border-blue-100 dark:border-blue-800">
+                                 <span className="font-bold text-blue-700 dark:text-blue-400 block mb-1">Motivo de consulta:</span>
+                                 {appt.notes}
+                              </div>
+                            )}
+
                             <textarea 
                             className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 text-sm bg-white/50 dark:bg-gray-700/50 focus:bg-white dark:focus:bg-gray-600 dark:text-white transition-colors outline-none focus:ring-2 focus:ring-blue-200"
                             rows={4} 
@@ -969,7 +983,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                       placeholder="Ej: Av. Corrientes 1234, Piso 5"
                     />
                  </div>
-                 {/* Nuevo Campo de Precio */}
                  <div>
                     <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Valor Sesión ($)</label>
                     <input 
