@@ -30,7 +30,8 @@ import {
   MapPin,
   Briefcase,
   ClipboardList,
-  Activity
+  Activity,
+  FileEdit
 } from 'lucide-react';
 import { Appointment, AppointmentStatus, PaymentMethod, PaymentStatus, WorkingHours, PatientProfile } from '../types';
 import { DataService } from '../services/dataService';
@@ -60,23 +61,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
   const [allProfiles, setAllProfiles] = useState<Record<string, PatientProfile>>({});
 
-  // Filter State
+  // Filter State for Calendar
   const [filterDate, setFilterDate] = useState<string | null>(null);
 
-  // Dark Mode
+  // Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // Manual Booking
+  // Manual Booking State
   const [showManualModal, setShowManualModal] = useState(false);
-  const [manualForm, setManualForm] = useState({ name: '', date: '', time: '', phone: '' });
+  // AGREGADO: Campo DNI al formulario manual
+  const [manualForm, setManualForm] = useState({ name: '', dni: '', date: '', time: '', phone: '' });
 
-  // Edit Appointment
+  // Edit Appointment State
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
 
-  // Payment Processing
+  // Payment Processing State
   const [paymentAppointment, setPaymentAppointment] = useState<Appointment | null>(null);
 
-  // Patient Detail
+  // Patient Detail State
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
   const [isProfileExpanded, setIsProfileExpanded] = useState(false); 
@@ -85,6 +87,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   // Note State
   const [unsavedNotes, setUnsavedNotes] = useState<Set<string>>(new Set());
   
+  // History Accordion State (AGREGADO: Para minimizar historias)
+  const [expandedHistoryIds, setExpandedHistoryIds] = useState<Set<string>>(new Set());
+
   // AI State
   const [aiSummary, setAiSummary] = useState<string>('');
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
@@ -125,6 +130,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     const newMode = !isDarkMode;
     setIsDarkMode(newMode);
     localStorage.setItem('psico_theme', newMode ? 'dark' : 'light');
+  };
+
+  const toggleHistoryItem = (id: string) => {
+    setExpandedHistoryIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   };
 
   const handleStatusChange = async (id: string, newStatus: AppointmentStatus) => {
@@ -181,10 +198,46 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Lógica para evitar duplicados por DNI
+    let finalPatientId = '';
+    let finalPatientName = manualForm.name;
+
+    // 1. Verificar si ya existe un perfil con ese DNI en memoria (allProfiles)
+    if (manualForm.dni) {
+      const existingProfile = Object.values(allProfiles).find(p => p.dni === manualForm.dni);
+      
+      if (existingProfile) {
+        // Usar paciente existente
+        finalPatientId = existingProfile.id;
+        finalPatientName = `${existingProfile.firstName} ${existingProfile.lastName}`;
+      } else {
+        // Crear nuevo perfil automáticamente si no existe
+        finalPatientId = 'manual-' + Date.now();
+        const newProfile: PatientProfile = {
+            id: finalPatientId,
+            firstName: manualForm.name.split(' ')[0],
+            lastName: manualForm.name.split(' ').slice(1).join(' ') || '',
+            dni: manualForm.dni,
+            phone: manualForm.phone,
+            birthDate: '',
+            insurance: '',
+            diagnosis: '',
+            notes: ''
+        };
+        // Guardar perfil en DB y Estado local
+        await DataService.savePatientProfile(newProfile);
+        setAllProfiles(prev => ({...prev, [finalPatientId]: newProfile}));
+      }
+    } else {
+      // Si no puso DNI, generar ID temporal (no recomendado pero permitido)
+      finalPatientId = 'manual-' + Date.now();
+    }
+
     await DataService.addAppointment({
-      patientName: manualForm.name,
+      patientName: finalPatientName,
       patientPhone: manualForm.phone,
-      patientId: 'manual-' + Date.now(),
+      patientId: finalPatientId,
       date: manualForm.date,
       time: manualForm.time,
       status: AppointmentStatus.CONFIRMED,
@@ -192,8 +245,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       paymentStatus: PaymentStatus.UNPAID,
       paymentMethod: PaymentMethod.PENDING
     });
+
     setShowManualModal(false);
-    setManualForm({ name: '', date: '', time: '', phone: '' });
+    setManualForm({ name: '', dni: '', date: '', time: '', phone: '' });
     loadData();
   };
 
@@ -220,6 +274,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     setAiSummary('');
     setIsProfileExpanded(false); 
     setPatientTab('overview'); 
+    setExpandedHistoryIds(new Set()); // Reset history expansion
     const existing = await DataService.getPatientProfile(patientId);
     setPatientProfile(existing || {
       id: patientId,
@@ -323,7 +378,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
 
     } catch (error: any) {
       console.error("Error generating summary", error);
-      // Manejo específico del error de cuota (429)
       if (error.toString().includes('429') || (error.message && error.message.includes('429'))) {
           setAiSummary("⚠️ **Límite de cuota excedido.**\nEl servicio de IA gratuito ha alcanzado su límite por ahora. Por favor espere unos minutos e intente nuevamente.");
       } else {
@@ -388,7 +442,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
           <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-white/30 dark:bg-gray-800/50">
             <h3 className="font-bold text-lg text-gray-800 dark:text-gray-200">Agenda de Hoy ({today})</h3>
             <button 
-              onClick={() => setShowManualModal(true)}
+              onClick={() => {
+                setManualForm({ name: '', dni: '', date: '', time: '', phone: '' });
+                setShowManualModal(true);
+              }}
               className="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-black dark:hover:bg-gray-200 transition shadow-lg"
             >
               <Plus size={16} /> Nuevo Turno
@@ -449,7 +506,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                   </button>
               )}
           </div>
-          <button onClick={() => setShowManualModal(true)} className="btn-modern bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-lg hover:shadow-xl"><Plus size={18} /> Reserva Manual</button>
+          <button onClick={() => {
+              setManualForm({ name: '', dni: '', date: '', time: '', phone: '' });
+              setShowManualModal(true);
+          }} className="btn-modern bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-lg hover:shadow-xl"><Plus size={18} /> Reserva Manual</button>
         </div>
 
         <div className="glass-panel rounded-3xl shadow-lg overflow-hidden border border-white/40">
@@ -529,6 +589,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         };
       });
     
+    // Add manually created patients that might not have appointments yet
     Object.values(allProfiles).forEach(profile => {
       if (!uniquePatients.find(p => p.id === profile.id)) {
         uniquePatients.push({
@@ -563,6 +624,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       const sortedHistory = (patientData.appointments || []).sort((a,b) => new Date(b.date + 'T' + b.time).getTime() - new Date(a.date + 'T' + a.time).getTime());
       const paymentHistory = (patientData.appointments || []).filter(a => a.paymentStatus === PaymentStatus.PAID);
 
+      // Lógica para encontrar la sesión "Actual" o la más reciente
+      const latestAppointment = sortedHistory.length > 0 ? sortedHistory[sortedHistory.length - 1] : null;
+
       return (
         <div className="space-y-6 animate-slide-up">
            <div className="flex items-center gap-4 mb-2">
@@ -570,6 +634,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Ficha: <span className="text-primary-600 dark:text-primary-400">{patientData.name.trim() || 'Nuevo Paciente'}</span></h2>
            </div>
 
+           {/* Personal Data Form - Collapsible */}
            <div className="glass-panel rounded-3xl shadow-sm border border-white/60 overflow-hidden">
               <div 
                 className="flex items-center justify-between p-6 cursor-pointer hover:bg-white/40 dark:hover:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700 transition-colors"
@@ -628,6 +693,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               )}
            </div>
 
+           {/* PATIENT TABS NAVIGATION */}
            <div className="flex space-x-2 border-b border-gray-200 dark:border-gray-700 mb-6">
               <button 
                 onClick={() => setPatientTab('overview')}
@@ -643,8 +709,41 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               </button>
            </div>
 
+           {/* --- OVERVIEW TAB --- */}
            {patientTab === 'overview' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
+                  
+                  {/* Current/Latest Session Note Widget */}
+                  <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 md:col-span-2">
+                     <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2"><FileEdit size={18} /> Sesión Actual / Última</h3>
+                     {latestAppointment ? (
+                        <div>
+                           <div className="flex justify-between items-center mb-2">
+                              <span className="text-sm font-bold text-primary-600 dark:text-primary-400">{latestAppointment.date} - {latestAppointment.time} hs</span>
+                              {unsavedNotes.has(latestAppointment.id) && <span className="text-xs text-amber-500 font-bold animate-pulse">Sin guardar</span>}
+                           </div>
+                           <textarea 
+                              className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-4 text-sm bg-white/50 dark:bg-gray-700/50 focus:bg-white dark:focus:bg-gray-600 dark:text-white transition-colors outline-none focus:ring-2 focus:ring-primary-200 min-h-[120px]"
+                              rows={5} 
+                              placeholder="Escriba las observaciones de la sesión de hoy..."
+                              value={latestAppointment.clinicalObservations || ''}
+                              onChange={(e) => handleNoteChange(latestAppointment.id, e.target.value)}
+                           />
+                           <div className="flex justify-end mt-3">
+                              <button 
+                                  onClick={() => handleSaveNote(latestAppointment.id, latestAppointment.clinicalObservations || '')}
+                                  className="bg-primary-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-primary-700 flex items-center gap-2 shadow-md"
+                              >
+                                  <Save size={16} /> Guardar Nota
+                              </button>
+                           </div>
+                        </div>
+                     ) : (
+                        <div className="text-center py-6 text-gray-400">No hay sesiones registradas para mostrar.</div>
+                     )}
+                  </div>
+
+                  {/* AI Summary Widget */}
                   <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-3xl shadow-xl text-white relative overflow-hidden group h-fit">
                       <div className="absolute top-[-20%] right-[-20%] w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
                       <div className="relative z-10">
@@ -657,15 +756,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                       </div>
                   </div>
 
+                  {/* Chronology Widget */}
                   <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 h-fit">
                       <div className="flex justify-between items-center mb-4">
                         <h3 className="font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2"><Clock size={18} /> Cronología</h3>
                         <button 
                             onClick={() => {
                                 const phone = 'phone' in patientData ? (patientData as any).phone : ''; 
+                                const dni = 'dni' in patientProfile! ? patientProfile!.dni : '';
                                 setManualForm({ 
                                     name: patientData.name, 
                                     phone: phone || '', 
+                                    dni: dni || '', // Auto-fill DNI
                                     date: '', 
                                     time: '' 
                                 });
@@ -700,6 +802,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                       </div>
                   </div>
 
+                  {/* Payment History Table Widget */}
                   <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 md:col-span-2">
                       <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2"><DollarSign size={18} /> Pagos</h3>
                       <div className="overflow-x-auto">
@@ -719,6 +822,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               </div>
            )}
 
+           {/* --- FULL HISTORY TAB (ACCORDION STYLE) --- */}
            {patientTab === 'history' && (
               <div className="space-y-4 animate-fade-in">
                    <h3 className="font-bold text-gray-800 dark:text-gray-100 text-xl flex items-center gap-2"><ClipboardList className="text-primary-500" /> Registro Completo de Sesiones</h3>
@@ -727,41 +831,59 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                    ) : (
                     sortedHistory.map(appt => {
                         const isUnsaved = unsavedNotes.has(appt.id);
+                        const isExpanded = expandedHistoryIds.has(appt.id);
+                        
                         return (
-                        <div key={appt.id} className="glass-panel p-6 rounded-2xl shadow-sm border border-white/60 relative group hover:shadow-md transition-all">
-                            <div className="flex justify-between items-center mb-3">
-                            <span className="font-bold text-gray-900 dark:text-white">{appt.date} <span className="text-gray-400 font-light mx-1">|</span> {appt.time} hs</span>
-                            <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wide border ${appt.status === AppointmentStatus.COMPLETED ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 border-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>{appt.status}</span>
+                        <div key={appt.id} className="glass-panel rounded-2xl shadow-sm border border-white/60 overflow-hidden transition-all duration-300">
+                            {/* Accordion Header */}
+                            <div 
+                                onClick={() => toggleHistoryItem(appt.id)}
+                                className="flex justify-between items-center p-4 bg-white/40 dark:bg-gray-800/40 cursor-pointer hover:bg-white/60 dark:hover:bg-gray-800/60"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="flex flex-col">
+                                        <span className="font-bold text-gray-900 dark:text-white">{appt.date}</span>
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">{appt.time} hs</span>
+                                    </div>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide border ${appt.status === AppointmentStatus.COMPLETED ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 border-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>{appt.status}</span>
+                                </div>
+                                {isExpanded ? <ChevronUp size={18} className="text-gray-400"/> : <ChevronDown size={18} className="text-gray-400"/>}
                             </div>
                             
-                            {appt.notes && (
-                              <div className="mb-3 p-3 bg-blue-50/50 dark:bg-blue-900/20 rounded-xl text-sm text-gray-700 dark:text-gray-300 border border-blue-100 dark:border-blue-800">
-                                 <span className="font-bold text-blue-700 dark:text-blue-400 block mb-1">Motivo de consulta:</span>
-                                 {appt.notes}
-                              </div>
-                            )}
+                            {/* Accordion Content */}
+                            {isExpanded && (
+                                <div className="p-4 border-t border-gray-100 dark:border-gray-700/50 animate-fade-in">
+                                    {/* MOSTRAR MOTIVO DE CONSULTA */}
+                                    {appt.notes && (
+                                    <div className="mb-3 p-3 bg-blue-50/50 dark:bg-blue-900/20 rounded-xl text-sm text-gray-700 dark:text-gray-300 border border-blue-100 dark:border-blue-800">
+                                        <span className="font-bold text-blue-700 dark:text-blue-400 block mb-1">Motivo de consulta:</span>
+                                        {appt.notes}
+                                    </div>
+                                    )}
 
-                            <textarea 
-                            className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 text-sm bg-white/50 dark:bg-gray-700/50 focus:bg-white dark:focus:bg-gray-600 dark:text-white transition-colors outline-none focus:ring-2 focus:ring-blue-200"
-                            rows={4} 
-                            placeholder="Escriba las observaciones de la sesión..."
-                            value={appt.clinicalObservations || ''}
-                            onChange={(e) => handleNoteChange(appt.id, e.target.value)}
-                            />
-                            <div className="flex justify-end mt-3">
-                            {isUnsaved ? (
-                                <button 
-                                    onClick={() => handleSaveNote(appt.id, appt.clinicalObservations || '')}
-                                    className="bg-primary-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-primary-700 flex items-center gap-2 shadow-md animate-pulse"
-                                >
-                                    <Save size={14} /> Guardar Nota
-                                </button>
-                            ) : (
-                                <div className="flex items-center gap-1 text-green-600 dark:text-green-400 text-xs font-bold px-3 py-1 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                                <Check size={14} /> Guardado
+                                    <textarea 
+                                    className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 text-sm bg-white/50 dark:bg-gray-700/50 focus:bg-white dark:focus:bg-gray-600 dark:text-white transition-colors outline-none focus:ring-2 focus:ring-blue-200"
+                                    rows={6} 
+                                    placeholder="Escriba las observaciones de la sesión..."
+                                    value={appt.clinicalObservations || ''}
+                                    onChange={(e) => handleNoteChange(appt.id, e.target.value)}
+                                    />
+                                    <div className="flex justify-end mt-3">
+                                    {isUnsaved ? (
+                                        <button 
+                                            onClick={() => handleSaveNote(appt.id, appt.clinicalObservations || '')}
+                                            className="bg-primary-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-primary-700 flex items-center gap-2 shadow-md animate-pulse"
+                                        >
+                                            <Save size={14} /> Guardar Nota
+                                        </button>
+                                    ) : (
+                                        <div className="flex items-center gap-1 text-green-600 dark:text-green-400 text-xs font-bold px-3 py-1 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                                        <Check size={14} /> Guardado
+                                        </div>
+                                    )}
+                                    </div>
                                 </div>
                             )}
-                            </div>
                         </div>
                     )})
                    )}
@@ -771,6 +893,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       );
     }
 
+    // List View
     return (
       <div className="space-y-8 animate-fade-in">
          <div className="flex flex-col gap-4">
@@ -1139,6 +1262,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
             <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Reserva Manual</h3>
             <form onSubmit={handleManualSubmit} className="space-y-4">
               <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Paciente</label><input required type="text" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={manualForm.name} onChange={e => setManualForm({...manualForm, name: e.target.value})} /></div>
+              
+              {/* CAMPO DNI AGREGADO */}
+              <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">DNI (Opcional - Para vincular ficha)</label>
+                  <input type="text" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={manualForm.dni} onChange={e => setManualForm({...manualForm, dni: e.target.value})} placeholder="Para evitar duplicados" />
+              </div>
+              
               <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Teléfono</label><input type="tel" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={manualForm.phone} onChange={e => setManualForm({...manualForm, phone: e.target.value})} /></div>
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fecha</label><input required type="date" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={manualForm.date} onChange={e => setManualForm({...manualForm, date: e.target.value})} /></div>
