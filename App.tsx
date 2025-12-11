@@ -1,43 +1,59 @@
 import React, { useState } from 'react';
 import { ClientPortal } from './components/ClientPortal';
 import { AdminPortal } from './components/AdminPortal';
-import { Lock, ArrowRight } from 'lucide-react';
+import { Lock, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 
-// --- NUEVOS IMPORTS PARA EL KILL SWITCH ---
+// Firebase Auth
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from './firebase';
+
+// Kill Switch
 import { PROJECT_STATUS } from './config';
 import { SuspendedView } from './components/SuspendedView';
-// ------------------------------------------
 
 export default function App() {
   // 1. VERIFICACIÓN DE LICENCIA (KILL SWITCH)
-  // Si isActive es false en config.ts, se muestra la pantalla de bloqueo.
   if (!PROJECT_STATUS.isActive) {
     return <SuspendedView />;
   }
-  // -------------------------------------------------
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   
   // Login Form State
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === 'admin' && password === 'admin') {
+    setLoading(true);
+    setError('');
+
+    try {
+      // Login real con Firebase
+      await signInWithEmailAndPassword(auth, email, password);
       setIsAdmin(true);
       setShowLogin(false);
-      setError('');
-    } else {
-      setError('Credenciales inválidas');
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
+        setError('Email o contraseña incorrectos.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Demasiados intentos. Espere un momento.');
+      } else {
+        setError('Error de conexión. Intente nuevamente.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleLogout = () => {
+    auth.signOut();
     setIsAdmin(false);
-    setUsername('');
+    setEmail('');
     setPassword('');
   };
 
@@ -59,18 +75,19 @@ export default function App() {
               <Lock size={28} />
             </div>
             <h2 className="text-2xl font-bold text-gray-800 tracking-tight">Acceso Profesional</h2>
-            <p className="text-gray-500 text-sm mt-1">Ingrese sus credenciales</p>
+            <p className="text-gray-500 text-sm mt-1">Ingrese sus credenciales de Firebase</p>
           </div>
           
           <form onSubmit={handleLogin} className="space-y-5">
             <div className="group">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 ml-1 group-focus-within:text-primary-600 transition-colors">Usuario</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 ml-1 group-focus-within:text-primary-600 transition-colors">Email</label>
               <input 
-                type="text" 
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                type="email" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-5 py-3 bg-white/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all duration-300"
-                placeholder="Ej: admin"
+                placeholder="doctor@email.com"
+                required
               />
             </div>
             <div className="group">
@@ -81,17 +98,22 @@ export default function App() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-5 py-3 bg-white/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all duration-300"
                 placeholder="••••••••"
+                required
               />
             </div>
             
             {error && (
-              <div className="bg-red-50 text-red-500 text-sm p-3 rounded-xl flex items-center justify-center animate-pulse">
-                {error}
+              <div className="bg-red-50 text-red-500 text-sm p-3 rounded-xl flex items-center gap-2 animate-pulse border border-red-100">
+                <AlertCircle size={16} /> {error}
               </div>
             )}
             
-            <button type="submit" className="btn-modern w-full bg-gradient-to-r from-primary-600 to-primary-500 text-white py-3.5 rounded-xl font-medium shadow-lg shadow-primary-500/30 hover:shadow-primary-500/50 flex items-center justify-center gap-2 group">
-              Ingresar <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform"/>
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="btn-modern w-full bg-gradient-to-r from-primary-600 to-primary-500 text-white py-3.5 rounded-xl font-medium shadow-lg shadow-primary-500/30 hover:shadow-primary-500/50 flex items-center justify-center gap-2 group disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="animate-spin" /> : <>Ingresar <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform"/></>}
             </button>
             <button 
               type="button" 
@@ -101,9 +123,6 @@ export default function App() {
               Volver al sitio
             </button>
           </form>
-          <div className="mt-8 text-center text-[10px] text-gray-400 font-mono bg-gray-50 rounded-lg py-2">
-             Demo: admin / admin
-          </div>
         </div>
       </div>
     );
