@@ -4,15 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>PsicoGestión - Consultorio Profesional</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <script>
       tailwind.config = {
         darkMode: 'class',
         theme: {
           extend: {
             fontFamily: {
-              sans: ['Outfit', 'sans-serif'], // Changed to Outfit for a more modern look
+              sans: ['Outfit', 'sans-serif'],
             },
             colors: {
               primary: {
@@ -42,6 +45,7 @@
         }
       }
     </script>
+    
     <style>
       body {
         -webkit-tap-highlight-color: transparent;
@@ -111,22 +115,10 @@
         transform: scale(0.95);
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
-    "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
+    
+    </head>
   <body class="text-gray-800 antialiased selection:bg-primary-500 selection:text-white">
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>
