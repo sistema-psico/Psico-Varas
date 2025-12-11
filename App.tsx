@@ -3,7 +3,19 @@ import { ClientPortal } from './components/ClientPortal';
 import { AdminPortal } from './components/AdminPortal';
 import { Lock, ArrowRight } from 'lucide-react';
 
+// --- NUEVOS IMPORTS PARA EL KILL SWITCH ---
+import { PROJECT_STATUS } from './config';
+import { SuspendedView } from './components/SuspendedView';
+// ------------------------------------------
+
 export default function App() {
+  // 1. VERIFICACIÓN DE LICENCIA (KILL SWITCH)
+  // Si isActive es false en config.ts, se muestra la pantalla de bloqueo.
+  if (!PROJECT_STATUS.isActive) {
+    return <SuspendedView />;
+  }
+  // -------------------------------------------------
+
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   
