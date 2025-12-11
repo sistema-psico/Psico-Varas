@@ -20,14 +20,13 @@ export enum PaymentStatus {
 }
 
 export interface PatientProfile {
-  id: string; // Matches appointment patientId
+  id: string; 
   firstName: string;
   lastName: string;
   dni: string;
-  phone?: string; // Added for manual registration
-  email?: string; // Added for manual registration
+  phone: string; // NUEVO CAMPO
   birthDate: string;
-  insurance: string; // Obra Social
+  insurance: string;
   diagnosis: string;
   notes: string;
 }
@@ -41,35 +40,27 @@ export interface Patient {
 
 export interface Appointment {
   id: string;
-  patientId: string; // Linking to Patient
-  patientName: string; // Denormalized for simpler list view
+  patientId: string;
+  patientName: string;
   patientPhone?: string;
   date: string; // ISO Date YYYY-MM-DD
   time: string; // HH:mm
   status: AppointmentStatus;
-  notes?: string; // Patient provided notes
-  clinicalObservations?: string; // Doctor's clinical notes
+  notes?: string; // Motivo de consulta (del paciente)
+  clinicalObservations?: string; // Notas del doctor
   cost: number;
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod;
 }
 
 export interface WorkingHours {
-  dayOfWeek: number; // 0 = Sunday, 1 = Monday, etc.
-  isEnabled: boolean; // Is the doctor working this day?
-  // We keep start/end for backward compat or simple summaries, 
-  // but activeHours is the source of truth for the DVR grid
-  activeHours: number[]; // e.g. [9, 10, 11, 16, 17, 18]
+  dayOfWeek: number;
+  isEnabled: boolean;
+  activeHours: number[];
 }
 
 export interface DayStats {
   date: string;
   totalAppointments: number;
   totalIncome: number;
-}
-
-export interface ProfessionalConfig {
-  name: string;
-  specialty: string;
-  address: string;
 }
