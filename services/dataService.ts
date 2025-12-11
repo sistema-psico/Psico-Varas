@@ -9,7 +9,9 @@ import {
   doc, 
   getDoc, 
   setDoc,
-  query
+  query,
+  where,
+  limit
 } from 'firebase/firestore';
 
 const HOLIDAYS = [
@@ -116,6 +118,22 @@ export const DataService = {
     }
   },
 
+  // --- NUEVA FUNCIÓN: Buscar paciente por DNI ---
+  getPatientByDni: async (dni: string): Promise<PatientProfile | null> => {
+    try {
+      const q = query(collection(db, 'patients'), where("dni", "==", dni), limit(1));
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        const docSnap = querySnapshot.docs[0];
+        return { id: docSnap.id, ...docSnap.data() } as PatientProfile;
+      }
+      return null;
+    } catch (e) {
+      console.error("Error searching patient by DNI:", e);
+      return null;
+    }
+  },
+
   getAllPatientProfiles: async (): Promise<Record<string, PatientProfile>> => {
     try {
       const querySnapshot = await getDocs(collection(db, 'patients'));
@@ -134,7 +152,6 @@ export const DataService = {
     await setDoc(doc(db, 'patients', profile.id), profile);
   },
 
-  // --- NUEVA FUNCIÓN PARA ELIMINAR PACIENTE ---
   deletePatientProfile: async (id: string): Promise<void> => {
     try {
       await deleteDoc(doc(db, 'patients', id));
@@ -178,7 +195,6 @@ export const DataService = {
     await setDoc(doc(db, 'settings', 'profile'), profile, { merge: true });
   },
 
-  // Alias de compatibilidad
   getProfessionalName: async (): Promise<string> => {
     const p = await DataService.getProfessionalProfile();
     return p.name;
