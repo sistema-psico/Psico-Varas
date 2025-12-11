@@ -48,7 +48,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const [schedule, setSchedule] = useState<WorkingHours[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Configuration State (Extended)
+  // Configuration State
   const [professionalName, setProfessionalName] = useState('');
   const [professionalSpecialty, setProfessionalSpecialty] = useState('');
   const [professionalAddress, setProfessionalAddress] = useState('');
@@ -58,23 +58,23 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
   const [allProfiles, setAllProfiles] = useState<Record<string, PatientProfile>>({});
 
-  // Filter State for Calendar
+  // Filter State
   const [filterDate, setFilterDate] = useState<string | null>(null);
 
-  // Dark Mode State
+  // Dark Mode
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // Manual Booking State
+  // Manual Booking
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualForm, setManualForm] = useState({ name: '', date: '', time: '', phone: '' });
 
-  // Edit Appointment State
+  // Edit Appointment
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
 
-  // Payment Processing State
+  // Payment Processing
   const [paymentAppointment, setPaymentAppointment] = useState<Appointment | null>(null);
 
-  // Patient Detail State
+  // Patient Detail
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
   const [isProfileExpanded, setIsProfileExpanded] = useState(true);
@@ -222,7 +222,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       firstName: name.split(' ')[0],
       lastName: name.split(' ').slice(1).join(' '),
       dni: '',
-      phone: '', // Default empty if not exists
+      phone: '',
       birthDate: '',
       insurance: '',
       diagnosis: '',
@@ -249,7 +249,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   };
 
   const handleDeletePatient = async (id: string) => {
-    if (window.confirm('¿Eliminar definitivamente a este paciente? Se perderán sus datos de perfil (los turnos históricos se mantendrán).')) {
+    if (window.confirm('¿Eliminar definitivamente a este paciente?')) {
       await DataService.deletePatientProfile(id);
       
       const newProfiles = { ...allProfiles };
@@ -276,7 +276,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     setAiSummary('');
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY;
+      // CORRECCIÓN CLAVE: Usamos VITE_GEMINI_API_KEY
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      
+      if (!apiKey) {
+        throw new Error("Falta la API Key de Gemini");
+      }
+
       const ai = new GoogleGenAI({ apiKey });
       
       let historyText = `Historial clínico de ${patientName}:\n`;
@@ -313,7 +319,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
 
     } catch (error: any) {
       console.error("Error generating summary", error);
-      setAiSummary("Ocurrió un error al contactar a la IA. Verifique su conexión o la clave API.");
+      setAiSummary("Error: Verifique la API Key en Vercel (VITE_GEMINI_API_KEY) o la conexión.");
     } finally {
       setIsGeneratingAi(false);
     }
@@ -514,7 +520,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         };
       });
     
-    // Add manually created patients that might not have appointments yet
     Object.values(allProfiles).forEach(profile => {
       if (!uniquePatients.find(p => p.id === profile.id)) {
         uniquePatients.push({
@@ -556,7 +561,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Ficha: <span className="text-primary-600 dark:text-primary-400">{patientData.name.trim() || 'Nuevo Paciente'}</span></h2>
            </div>
 
-           {/* Personal Data Form - Collapsible */}
            <div className="glass-panel rounded-3xl shadow-sm border border-white/60 overflow-hidden">
               <div 
                 className="flex items-center justify-between p-6 cursor-pointer hover:bg-white/40 dark:hover:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700 transition-colors"
@@ -601,7 +605,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                        <input type="text" className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" value={patientProfile.diagnosis} onChange={e => setPatientProfile({...patientProfile!, diagnosis: e.target.value})} />
                     </div>
                     <div className="md:col-span-2 flex justify-end gap-3">
-                        {/* BOTÓN ELIMINAR PACIENTE */}
                        <button 
                         type="button" 
                         onClick={() => handleDeletePatient(patientProfile!.id)}
@@ -616,7 +619,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               )}
            </div>
 
-           {/* Tabs for History */}
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-6">
                 
