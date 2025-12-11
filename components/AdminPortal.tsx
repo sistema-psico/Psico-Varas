@@ -60,27 +60,27 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
   const [allProfiles, setAllProfiles] = useState<Record<string, PatientProfile>>({});
 
-  // Filter State for Calendar
+  // Filter State
   const [filterDate, setFilterDate] = useState<string | null>(null);
 
-  // Dark Mode State
+  // Dark Mode
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // Manual Booking State
+  // Manual Booking
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualForm, setManualForm] = useState({ name: '', date: '', time: '', phone: '' });
 
-  // Edit Appointment State
+  // Edit Appointment
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
 
-  // Payment Processing State
+  // Payment Processing
   const [paymentAppointment, setPaymentAppointment] = useState<Appointment | null>(null);
 
-  // Patient Detail State
+  // Patient Detail
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
-  const [isProfileExpanded, setIsProfileExpanded] = useState(false); // Collapsed by default to save space
-  const [patientTab, setPatientTab] = useState<'overview' | 'history'>('overview'); // NEW: Tab state for patient view
+  const [isProfileExpanded, setIsProfileExpanded] = useState(false); 
+  const [patientTab, setPatientTab] = useState<'overview' | 'history'>('overview'); 
   
   // Note State
   const [unsavedNotes, setUnsavedNotes] = useState<Set<string>>(new Set());
@@ -218,8 +218,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const handlePatientSelect = async (patientId: string, name: string) => {
     setSelectedPatientId(patientId);
     setAiSummary('');
-    setIsProfileExpanded(false); // Start collapsed
-    setPatientTab('overview'); // Reset to overview tab
+    setIsProfileExpanded(false); 
+    setPatientTab('overview'); 
     const existing = await DataService.getPatientProfile(patientId);
     setPatientProfile(existing || {
       id: patientId,
@@ -238,7 +238,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     const newId = 'manual-' + Date.now();
     setSelectedPatientId(newId);
     setAiSummary('');
-    setIsProfileExpanded(true); // Expand form for new patient
+    setIsProfileExpanded(true); 
     setPatientTab('overview');
     setPatientProfile({
       id: newId,
@@ -323,7 +323,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
 
     } catch (error: any) {
       console.error("Error generating summary", error);
-      setAiSummary("Error: Verifique la API Key o la conexión.");
+      // Manejo específico del error de cuota (429)
+      if (error.toString().includes('429') || (error.message && error.message.includes('429'))) {
+          setAiSummary("⚠️ **Límite de cuota excedido.**\nEl servicio de IA gratuito ha alcanzado su límite por ahora. Por favor espere unos minutos e intente nuevamente.");
+      } else {
+          setAiSummary("Error: Verifique la API Key o la conexión.");
+      }
     } finally {
       setIsGeneratingAi(false);
     }
@@ -524,7 +529,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         };
       });
     
-    // Add manually created patients that might not have appointments yet
     Object.values(allProfiles).forEach(profile => {
       if (!uniquePatients.find(p => p.id === profile.id)) {
         uniquePatients.push({
@@ -566,7 +570,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Ficha: <span className="text-primary-600 dark:text-primary-400">{patientData.name.trim() || 'Nuevo Paciente'}</span></h2>
            </div>
 
-           {/* Personal Data Form - Collapsible */}
            <div className="glass-panel rounded-3xl shadow-sm border border-white/60 overflow-hidden">
               <div 
                 className="flex items-center justify-between p-6 cursor-pointer hover:bg-white/40 dark:hover:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700 transition-colors"
@@ -625,7 +628,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               )}
            </div>
 
-           {/* PATIENT TABS NAVIGATION */}
            <div className="flex space-x-2 border-b border-gray-200 dark:border-gray-700 mb-6">
               <button 
                 onClick={() => setPatientTab('overview')}
@@ -641,10 +643,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               </button>
            </div>
 
-           {/* TAB CONTENT */}
            {patientTab === 'overview' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
-                  {/* AI Summary Widget */}
                   <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-3xl shadow-xl text-white relative overflow-hidden group h-fit">
                       <div className="absolute top-[-20%] right-[-20%] w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
                       <div className="relative z-10">
@@ -657,7 +657,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                       </div>
                   </div>
 
-                  {/* Chronology Widget */}
                   <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 h-fit">
                       <div className="flex justify-between items-center mb-4">
                         <h3 className="font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2"><Clock size={18} /> Cronología</h3>
@@ -678,7 +677,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                         </button>
                       </div>
                       <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                        {sortedHistory.slice(0, 5).map(appt => { // Show only recent 5 in summary
+                        {sortedHistory.slice(0, 5).map(appt => { 
                             const isFuture = new Date(appt.date + 'T' + appt.time) > new Date();
                             return (
                             <div key={appt.id} className={`flex items-center justify-between p-3 rounded-xl border transition-all hover:scale-[1.02] ${isFuture ? 'bg-blue-50/50 border-blue-100 dark:bg-blue-900/20 dark:border-blue-900' : 'bg-white/40 border-gray-100 dark:bg-gray-700/30 dark:border-gray-700'}`}>
@@ -701,7 +700,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                       </div>
                   </div>
 
-                  {/* Payment History Table Widget */}
                   <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 md:col-span-2">
                       <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2"><DollarSign size={18} /> Pagos</h3>
                       <div className="overflow-x-auto">
@@ -721,7 +719,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               </div>
            )}
 
-           {/* FULL HISTORY TAB */}
            {patientTab === 'history' && (
               <div className="space-y-4 animate-fade-in">
                    <h3 className="font-bold text-gray-800 dark:text-gray-100 text-xl flex items-center gap-2"><ClipboardList className="text-primary-500" /> Registro Completo de Sesiones</h3>
@@ -737,7 +734,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                             <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wide border ${appt.status === AppointmentStatus.COMPLETED ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 border-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>{appt.status}</span>
                             </div>
                             
-                            {/* MOSTRAR MOTIVO DE CONSULTA */}
                             {appt.notes && (
                               <div className="mb-3 p-3 bg-blue-50/50 dark:bg-blue-900/20 rounded-xl text-sm text-gray-700 dark:text-gray-300 border border-blue-100 dark:border-blue-800">
                                  <span className="font-bold text-blue-700 dark:text-blue-400 block mb-1">Motivo de consulta:</span>
@@ -775,13 +771,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       );
     }
 
-    // List View
     return (
       <div className="space-y-8 animate-fade-in">
          <div className="flex flex-col gap-4">
              <div className="flex justify-between items-center">
                 <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Pacientes</h2>
-                {/* Nuevo Botón de Paciente Manual */}
                 <button onClick={handleNewPatient} className="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 shadow-lg hover:bg-black dark:hover:bg-gray-200 transition-all">
                     <Plus size={18} /> Nuevo Paciente
                 </button>
@@ -894,7 +888,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
            <div className="glass-panel p-8 rounded-3xl shadow-lg border border-white/60 h-96 flex flex-col">
               <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-6">Estado de Pagos</h3>
-               <div className="flex-1 min-h-0">
+               <div className="flex-1 min-h-0" style={{ height: '384px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -922,7 +916,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
 
            <div className="glass-panel p-8 rounded-3xl shadow-lg border border-white/60 h-96 flex flex-col">
               <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-6">Métodos de Pago</h3>
-               <div className="flex-1 min-h-0">
+               <div className="flex-1 min-h-0" style={{ height: '384px' }}>
                 {barData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={barData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -1241,5 +1235,3 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     </div>
   );
 };
-
-
