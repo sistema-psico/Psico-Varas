@@ -29,6 +29,12 @@ const INITIAL_SCHEDULE: WorkingHours[] = [
   { dayOfWeek: 0, isEnabled: false, activeHours: [] },
 ];
 
+export interface ProfessionalProfile {
+  name: string;
+  specialty: string;
+  address: string;
+}
+
 export const DataService = {
   getArgentineHolidays: (): string[] => HOLIDAYS,
 
@@ -127,35 +133,37 @@ export const DataService = {
     await setDoc(doc(db, 'patients', profile.id), profile);
   },
 
-  // --- CONFIGURACIÓN GENERAL ---
+  // --- CONFIGURACIÓN GENERAL (PERFIL PROFESIONAL) ---
   
-  // Función estándar que usa el nuevo sistema
-  getProfessionalName: async (): Promise<string> => {
+  getProfessionalProfile: async (): Promise<ProfessionalProfile> => {
     try {
       const docRef = doc(db, 'settings', 'profile');
       const docSnap = await getDoc(docRef);
-      return docSnap.exists() ? docSnap.data().professionalName : 'Lic. Gabriel Medina';
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        return {
+          name: data.name || 'Lic. Gabriel Medina',
+          specialty: data.specialty || 'Psicología Clínica',
+          address: data.address || 'Av. Corrientes 1234, Piso 5, CABA'
+        };
+      }
+      return {
+        name: 'Lic. Gabriel Medina',
+        specialty: 'Psicología Clínica',
+        address: 'Av. Corrientes 1234, Piso 5, CABA'
+      };
     } catch (e) {
-      return 'Lic. Gabriel Medina';
+      return {
+        name: 'Lic. Gabriel Medina',
+        specialty: 'Psicología Clínica',
+        address: 'Av. Corrientes 1234, Piso 5, CABA'
+      };
     }
   },
 
-  saveProfessionalName: async (name: string): Promise<void> => {
-    await setDoc(doc(db, 'settings', 'profile'), { professionalName: name }, { merge: true });
+  saveProfessionalProfile: async (profile: ProfessionalProfile): Promise<void> => {
+    await setDoc(doc(db, 'settings', 'profile'), profile, { merge: true });
   },
-
-  // --- ALIAS DE COMPATIBILIDAD (AQUÍ ESTÁ LA SOLUCIÓN) ---
-  // Estas funciones redirigen las llamadas "viejas" a las nuevas funciones de Firebase
-  getProfessionalConfig: async (): Promise<string> => {
-    return await DataService.getProfessionalName();
-  },
-
-  saveProfessionalConfig: async (data: any): Promise<void> => {
-    // Maneja si le pasan un string directo o un objeto
-    const name = typeof data === 'string' ? data : data?.professionalName || 'Lic. Gabriel Medina';
-    await DataService.saveProfessionalName(name);
-  },
-  // -------------------------------------------------------
 
   // --- LÓGICA DE TURNOS ---
   getAvailableSlots: async (dateStr: string): Promise<string[]> => {
