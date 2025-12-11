@@ -10,6 +10,7 @@ export const ClientPortal: React.FC = () => {
   const [professionalName, setProfessionalName] = useState('Lic. Gabriel Medina');
   const [professionalSpecialty, setProfessionalSpecialty] = useState('Psicología Clínica');
   const [professionalAddress, setProfessionalAddress] = useState('Av. Corrientes 1234, Piso 5, CABA');
+  const [sessionPrice, setSessionPrice] = useState(5000);
 
   // Booking State
   const [step, setStep] = useState(1);
@@ -47,6 +48,7 @@ export const ClientPortal: React.FC = () => {
       setProfessionalName(data.name);
       setProfessionalSpecialty(data.specialty);
       setProfessionalAddress(data.address);
+      setSessionPrice(data.price);
   };
 
   const loadSlots = async (date: string) => {
@@ -71,7 +73,7 @@ export const ClientPortal: React.FC = () => {
       date: selectedDate,
       time: selectedTime,
       status: AppointmentStatus.PENDING,
-      cost: 5000,
+      cost: sessionPrice, // USAR PRECIO DINÁMICO
       paymentStatus: PaymentStatus.UNPAID,
       paymentMethod: PaymentMethod.PENDING,
       notes: formData.notes
