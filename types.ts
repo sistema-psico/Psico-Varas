@@ -24,6 +24,8 @@ export interface PatientProfile {
   firstName: string;
   lastName: string;
   dni: string;
+  phone?: string; // Added for manual registration
+  email?: string; // Added for manual registration
   birthDate: string;
   insurance: string; // Obra Social
   diagnosis: string;
@@ -64,4 +66,10 @@ export interface DayStats {
   date: string;
   totalAppointments: number;
   totalIncome: number;
+}
+
+export interface ProfessionalConfig {
+  name: string;
+  specialty: string;
+  address: string;
 }
