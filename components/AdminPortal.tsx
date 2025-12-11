@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Calendar as CalendarIcon, 
   Users, 
@@ -29,14 +29,9 @@ import {
   Wallet,
   Smartphone,
   Trash2,
-  UserCog,
-  UserPlus,
-  Mail,
-  Copy,
-  Eye,
-  EyeOff
+  UserCog
 } from 'lucide-react';
-import { Appointment, AppointmentStatus, PaymentMethod, PaymentStatus, WorkingHours, PatientProfile, ProfessionalConfig } from '../types';
+import { Appointment, AppointmentStatus, PaymentMethod, PaymentStatus, WorkingHours, PatientProfile } from '../types';
 import { DataService } from '../services/dataService';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
@@ -55,11 +50,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const [loading, setLoading] = useState(true);
 
   // Configuration State
-  const [professionalConfig, setProfessionalConfig] = useState<ProfessionalConfig>({
-    name: '',
-    specialty: '',
-    address: ''
-  });
+  const [professionalName, setProfessionalName] = useState('');
 
   // Search State
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
@@ -73,24 +64,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
 
   // Manual Booking State
   const [showManualModal, setShowManualModal] = useState(false);
-  const [manualForm, setManualForm] = useState({ name: '', date: '', time: '', phone: '', patientId: '' });
-  
-  // Booking Autocomplete State
-  const [bookingSuggestions, setBookingSuggestions] = useState<PatientProfile[]>([]);
-  const [showBookingSuggestions, setShowBookingSuggestions] = useState(false);
-  const suggestionsRef = useRef<HTMLDivElement>(null);
-
-  // New Patient State
-  const [showNewPatientModal, setShowNewPatientModal] = useState(false);
-  const [newPatientForm, setNewPatientForm] = useState({ 
-    firstName: '', 
-    lastName: '', 
-    phone: '', 
-    email: '', 
-    dni: '', 
-    insurance: '',
-    notes: '' 
-  });
+  const [manualForm, setManualForm] = useState({ name: '', date: '', time: '', phone: '' });
 
   // Edit Appointment State
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
@@ -101,9 +75,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   // Patient Detail State
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
-  // View State for Patient Detail
-  const [isPatientInfoCollapsed, setIsPatientInfoCollapsed] = useState(false);
-  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
+  const [isProfileExpanded, setIsProfileExpanded] = useState(true);
   
   // Note State
   const [unsavedNotes, setUnsavedNotes] = useState<Set<string>>(new Set());
@@ -114,35 +86,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
 
   useEffect(() => {
     loadData();
-    // Load Dark Mode Preference
     const savedTheme = localStorage.getItem('psico_theme');
     if (savedTheme === 'dark') {
       setIsDarkMode(true);
     }
-    
-    // Click outside handler for suggestions
-    const handleClickOutside = (event: MouseEvent) => {
-      if (suggestionsRef.current && !suggestionsRef.current.contains(event.target as Node)) {
-        setShowBookingSuggestions(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-
   }, []);
 
   const loadData = async () => {
     setLoading(true);
-    const appts = await DataService.getAppointments();
-    const sched = await DataService.getScheduleConfig();
-    const profiles = await DataService.getAllPatientProfiles();
-    const profConfig = await DataService.getProfessionalConfig();
-    
-    setAppointments(appts);
-    setSchedule(sched);
-    setAllProfiles(profiles);
-    setProfessionalConfig(profConfig);
-    setLoading(false);
+    try {
+      const appts = await DataService.getAppointments();
+      const sched = await DataService.getScheduleConfig();
+      const profiles = await DataService.getAllPatientProfiles();
+      const profName = await DataService.getProfessionalName(); // CORREGIDO
+      
+      setAppointments(appts);
+      setSchedule(sched);
+      setAllProfiles(profiles);
+      setProfessionalName(profName);
+    } catch (error) {
+      console.error("Error loading data:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleDarkMode = () => {
@@ -171,16 +137,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       paymentStatus: PaymentStatus.PAID 
     });
     setAppointments(updated);
-    setPaymentAppointment(null); // Close modal
+    setPaymentAppointment(null); 
   };
 
-  const handleProfessionalConfigSave = async (e: React.FormEvent) => {
+  const handleProfessionalNameSave = async (e: React.FormEvent) => {
       e.preventDefault();
-      await DataService.saveProfessionalConfig(professionalConfig);
-      alert('Configuración actualizada correctamente');
+      await DataService.saveProfessionalName(professionalName); // CORREGIDO
+      alert('Nombre actualizado correctamente');
   };
 
-  // Local state update for typing
   const handleNoteChange = (id: string, note: string) => {
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, clinicalObservations: note } : a));
     setUnsavedNotes(prev => {
@@ -190,7 +155,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     });
   };
 
-  // Persist to DataService
   const handleSaveNote = async (id: string, note: string) => {
     await DataService.updateAppointment(id, { clinicalObservations: note });
     setUnsavedNotes(prev => {
@@ -200,40 +164,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     });
   };
 
-  // --- Manual Booking Logic with Autocomplete ---
-
-  const handleManualNameChange = (text: string) => {
-    setManualForm({ ...manualForm, name: text, patientId: '' }); // Reset ID if typing manually
-    
-    if (text.length > 0) {
-      const lowerText = text.toLowerCase();
-      const matches = Object.values(allProfiles).filter((p: PatientProfile) => 
-        p.firstName.toLowerCase().includes(lowerText) || 
-        p.lastName.toLowerCase().includes(lowerText)
-      );
-      setBookingSuggestions(matches);
-      setShowBookingSuggestions(matches.length > 0);
-    } else {
-      setShowBookingSuggestions(false);
-    }
-  };
-
-  const selectBookingPatient = (patient: PatientProfile) => {
-    setManualForm({
-      ...manualForm,
-      name: `${patient.firstName} ${patient.lastName}`,
-      phone: patient.phone || '',
-      patientId: patient.id
-    });
-    setShowBookingSuggestions(false);
-  };
-
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await DataService.addAppointment({
       patientName: manualForm.name,
       patientPhone: manualForm.phone,
-      patientId: manualForm.patientId || 'manual-' + Date.now(),
+      patientId: 'manual-' + Date.now(),
       date: manualForm.date,
       time: manualForm.time,
       status: AppointmentStatus.CONFIRMED,
@@ -242,33 +178,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       paymentMethod: PaymentMethod.PENDING
     });
     setShowManualModal(false);
-    setManualForm({ name: '', date: '', time: '', phone: '', patientId: '' });
+    setManualForm({ name: '', date: '', time: '', phone: '' });
     loadData();
-  };
-
-  // ----------------------------------------------
-
-  const handleCreatePatient = async (e: React.FormEvent) => {
-      e.preventDefault();
-      const newId = 'p-' + Date.now();
-      const newProfile: PatientProfile = {
-          id: newId,
-          firstName: newPatientForm.firstName,
-          lastName: newPatientForm.lastName,
-          dni: newPatientForm.dni,
-          phone: newPatientForm.phone,
-          email: newPatientForm.email,
-          birthDate: '', // Optional for now
-          insurance: newPatientForm.insurance,
-          diagnosis: '',
-          notes: newPatientForm.notes
-      };
-      
-      await DataService.savePatientProfile(newProfile);
-      setAllProfiles(prev => ({ ...prev, [newId]: newProfile }));
-      setShowNewPatientModal(false);
-      setNewPatientForm({ firstName: '', lastName: '', phone: '', email: '', dni: '', insurance: '', notes: '' });
-      alert('Paciente creado correctamente');
   };
 
   const handleEditAppointmentSubmit = async (e: React.FormEvent) => {
@@ -292,46 +203,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const handlePatientSelect = async (patientId: string, name: string) => {
     setSelectedPatientId(patientId);
     setAiSummary('');
-    setIsPatientInfoCollapsed(false); // Reset to open when selecting a new patient
-    
-    // Load existing profile or create scaffold
+    setIsProfileExpanded(true);
     const existing = await DataService.getPatientProfile(patientId);
-    
-    if (existing) {
-        setPatientProfile(existing);
-    } else {
-        // Fallback if we only have appointment data but no profile yet
-        setPatientProfile({
-          id: patientId,
-          firstName: name.split(' ')[0],
-          lastName: name.split(' ').slice(1).join(' '),
-          dni: '',
-          birthDate: '',
-          insurance: '',
-          diagnosis: '',
-          notes: ''
-        });
-    }
-
-    // Auto-expand the most recent appointment for this patient
-    const patientAppts = appointments
-        .filter(a => a.patientId === patientId || a.patientName === name)
-        .sort((a,b) => new Date(b.date + 'T' + b.time).getTime() - new Date(a.date + 'T' + a.time).getTime());
-    
-    if (patientAppts.length > 0) {
-        setExpandedSessionId(patientAppts[0].id);
-    } else {
-        setExpandedSessionId(null);
-    }
+    setPatientProfile(existing || {
+      id: patientId,
+      firstName: name.split(' ')[0],
+      lastName: name.split(' ').slice(1).join(' '),
+      dni: '',
+      birthDate: '',
+      insurance: '',
+      diagnosis: '',
+      notes: ''
+    });
   };
 
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (patientProfile) {
       await DataService.savePatientProfile(patientProfile);
-      setAllProfiles(prev => ({...prev, [patientProfile.id]: patientProfile})); // Update local cache
-      setIsPatientInfoCollapsed(true); // Auto collapse on save for cleaner view
-      alert("Datos guardados correctamente.");
+      setAllProfiles(prev => ({...prev, [patientProfile.id]: patientProfile}));
+      setIsProfileExpanded(false);
     }
   };
 
@@ -340,7 +231,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     setAiSummary('');
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY;
+      const ai = new GoogleGenAI({ apiKey });
       
       let historyText = `Historial clínico de ${patientName}:\n`;
       patientAppointments
@@ -358,7 +250,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       }
 
       const response: GenerateContentResponse = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.0-flash',
         contents: `Actúa como un asistente clínico profesional para un psicólogo. 
         Analiza las siguientes notas cronológicas de sesiones y genera un resumen clínico conciso.
         Incluye: 1) Temas principales tratados, 2) Evolución del paciente, 3) Sugerencias generales si las hubiera.
@@ -376,24 +268,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
 
     } catch (error: any) {
       console.error("Error generating summary", error);
-      setAiSummary("Ocurrió un error al contactar a la IA. Por favor intente nuevamente.");
+      setAiSummary("Ocurrió un error al contactar a la IA. Verifique su conexión o la clave API.");
     } finally {
       setIsGeneratingAi(false);
     }
   };
-
-  const copyAiSummary = () => {
-    if (aiSummary) {
-      navigator.clipboard.writeText(aiSummary);
-      alert('Resumen copiado al portapapeles');
-    }
-  };
-
-  const toggleSessionExpansion = (apptId: string) => {
-      setExpandedSessionId(expandedSessionId === apptId ? null : apptId);
-  };
-
-  // --- Views ---
 
   const renderDashboard = () => {
     const today = new Date().toISOString().split('T')[0];
@@ -575,9 +454,380 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     );
   };
 
+  const renderPatients = () => {
+    let uniquePatients = Array.from(new Set(appointments.map(a => a.patientId)))
+      .map(id => {
+        const patientAppts = appointments.filter(a => a.patientId === id);
+        const lastAppt = patientAppts.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+        return {
+          id,
+          name: lastAppt?.patientName || 'Desconocido',
+          phone: lastAppt?.patientPhone,
+          totalVisits: patientAppts.length,
+          lastVisit: lastAppt?.date,
+          appointments: patientAppts
+        };
+      });
+
+    if (patientSearchTerm) {
+      const term = patientSearchTerm.toLowerCase();
+      uniquePatients = uniquePatients.filter(p => {
+        const profile = allProfiles[p.id];
+        const matchesName = p.name.toLowerCase().includes(term);
+        const matchesDni = profile?.dni?.toLowerCase().includes(term);
+        const matchesInsurance = profile?.insurance?.toLowerCase().includes(term);
+        return matchesName || matchesDni || matchesInsurance;
+      });
+    }
+
+    if (selectedPatientId && patientProfile) {
+      const patientData = uniquePatients.find(p => p.id === selectedPatientId) || {
+        id: selectedPatientId,
+        name: patientProfile.firstName + ' ' + patientProfile.lastName,
+        appointments: appointments.filter(a => a.patientId === selectedPatientId)
+      };
+      
+      const sortedHistory = (patientData.appointments || []).sort((a,b) => new Date(b.date + 'T' + b.time).getTime() - new Date(a.date + 'T' + a.time).getTime());
+      const paymentHistory = (patientData.appointments || []).filter(a => a.paymentStatus === PaymentStatus.PAID);
+
+      return (
+        <div className="space-y-6 animate-slide-up">
+           <div className="flex items-center gap-4 mb-2">
+              <button onClick={() => { setSelectedPatientId(null); setPatientProfile(null); }} className="p-3 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 text-gray-600 dark:text-gray-300 transition-all"><ChevronLeft size={24} /></button>
+              <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Ficha: <span className="text-primary-600 dark:text-primary-400">{patientData.name}</span></h2>
+           </div>
+
+           <div className="glass-panel rounded-3xl shadow-sm border border-white/60 overflow-hidden">
+              <div 
+                className="flex items-center justify-between p-6 cursor-pointer hover:bg-white/40 dark:hover:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700 transition-colors"
+                onClick={() => setIsProfileExpanded(!isProfileExpanded)}
+              >
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary-100 dark:bg-primary-900/30 rounded-lg text-primary-600 dark:text-primary-400"><FileText size={20} /></div>
+                    <h3 className="font-bold text-lg text-gray-800 dark:text-gray-200">Datos Personales y Diagnóstico</h3>
+                </div>
+                {isProfileExpanded ? <ChevronUp size={20} className="text-gray-400"/> : <ChevronDown size={20} className="text-gray-400"/>}
+              </div>
+
+              {isProfileExpanded && (
+                <div className="p-8 pt-4 animate-fade-in bg-white/30 dark:bg-gray-800/30">
+                  <form onSubmit={handleProfileSave} className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+                    <div>
+                       <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase ml-1 mb-1 block">Nombre</label>
+                       <input type="text" className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" value={patientProfile.firstName} onChange={e => setPatientProfile({...patientProfile!, firstName: e.target.value})} />
+                    </div>
+                    <div>
+                       <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase ml-1 mb-1 block">Apellido</label>
+                       <input type="text" className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" value={patientProfile.lastName} onChange={e => setPatientProfile({...patientProfile!, lastName: e.target.value})} />
+                    </div>
+                    <div>
+                       <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase ml-1 mb-1 block">DNI</label>
+                       <input type="text" className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" value={patientProfile.dni} onChange={e => setPatientProfile({...patientProfile!, dni: e.target.value})} />
+                    </div>
+                    <div>
+                       <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase ml-1 mb-1 block">Fecha Nacimiento</label>
+                       <input type="date" className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" value={patientProfile.birthDate} onChange={e => setPatientProfile({...patientProfile!, birthDate: e.target.value})} />
+                    </div>
+                    <div>
+                       <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase ml-1 mb-1 block">Obra Social / Prepaga</label>
+                       <input type="text" className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" value={patientProfile.insurance} onChange={e => setPatientProfile({...patientProfile!, insurance: e.target.value})} />
+                    </div>
+                     <div className="md:col-span-2">
+                       <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase ml-1 mb-1 block">Diagnóstico Principal</label>
+                       <input type="text" className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" value={patientProfile.diagnosis} onChange={e => setPatientProfile({...patientProfile!, diagnosis: e.target.value})} />
+                    </div>
+                    <div className="md:col-span-2 flex justify-end">
+                       <button type="submit" className="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-6 py-2.5 rounded-xl font-medium flex items-center gap-2 hover:bg-black shadow-lg"><Save size={18} /> Guardar Datos</button>
+                    </div>
+                  </form>
+                </div>
+              )}
+           </div>
+
+           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-6">
+                 <div className="space-y-4">
+                   <h3 className="font-bold text-gray-800 dark:text-gray-100 text-xl">Historia Clínica</h3>
+                   {sortedHistory.map(appt => {
+                     const isUnsaved = unsavedNotes.has(appt.id);
+                     return (
+                     <div key={appt.id} className="glass-panel p-6 rounded-2xl shadow-sm border border-white/60 relative group hover:shadow-md transition-all">
+                        <div className="flex justify-between items-center mb-3">
+                           <span className="font-bold text-gray-900 dark:text-white">{appt.date} <span className="text-gray-400 font-light mx-1">|</span> {appt.time} hs</span>
+                           <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wide border ${appt.status === AppointmentStatus.COMPLETED ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 border-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>{appt.status}</span>
+                        </div>
+                        <textarea 
+                          className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 text-sm bg-white/50 dark:bg-gray-700/50 focus:bg-white dark:focus:bg-gray-600 dark:text-white transition-colors outline-none focus:ring-2 focus:ring-blue-200"
+                          rows={4} 
+                          placeholder="Escriba las observaciones de la sesión..."
+                          value={appt.clinicalObservations || ''}
+                          onChange={(e) => handleNoteChange(appt.id, e.target.value)}
+                        />
+                        <div className="flex justify-end mt-3">
+                           {isUnsaved ? (
+                             <button 
+                                onClick={() => handleSaveNote(appt.id, appt.clinicalObservations || '')}
+                                className="bg-primary-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-primary-700 flex items-center gap-2 shadow-md animate-pulse"
+                             >
+                                <Save size={14} /> Guardar Nota
+                             </button>
+                           ) : (
+                             <div className="flex items-center gap-1 text-green-600 dark:text-green-400 text-xs font-bold px-3 py-1 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                               <Check size={14} /> Guardado
+                             </div>
+                           )}
+                        </div>
+                     </div>
+                   )})}
+                 </div>
+              </div>
+
+              <div className="lg:col-span-1 space-y-6">
+                 <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60">
+                    <div className="flex justify-between items-center mb-4">
+                       <h3 className="font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2"><Clock size={18} /> Cronología</h3>
+                       <button 
+                          onClick={() => {
+                              const phone = 'phone' in patientData ? (patientData as any).phone : ''; 
+                              setManualForm({ 
+                                  name: patientData.name, 
+                                  phone: phone || '', 
+                                  date: '', 
+                                  time: '' 
+                              });
+                              setShowManualModal(true);
+                          }}
+                          className="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-md hover:bg-black dark:hover:bg-gray-200"
+                       >
+                          <Plus size={14} /> Nuevo Turno
+                       </button>
+                    </div>
+                    <div className="space-y-3 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+                       {sortedHistory.map(appt => {
+                          const isFuture = new Date(appt.date + 'T' + appt.time) > new Date();
+                          return (
+                          <div key={appt.id} className={`flex items-center justify-between p-3 rounded-xl border transition-all hover:scale-[1.02] ${isFuture ? 'bg-blue-50/50 border-blue-100 dark:bg-blue-900/20 dark:border-blue-900' : 'bg-white/40 border-gray-100 dark:bg-gray-700/30 dark:border-gray-700'}`}>
+                             <div>
+                                <div className="flex items-center gap-2">
+                                   <span className="text-xs font-bold text-gray-700 dark:text-gray-300">{appt.date}</span>
+                                   <span className="text-xs text-gray-500 dark:text-gray-400">{appt.time}hs</span>
+                                </div>
+                                {isFuture && <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wide">Próximo</span>}
+                             </div>
+                             <span className={`w-2 h-2 rounded-full ${
+                                appt.status === AppointmentStatus.CONFIRMED ? 'bg-blue-500' :
+                                appt.status === AppointmentStatus.COMPLETED ? 'bg-green-500' :
+                                appt.status === AppointmentStatus.CANCELLED ? 'bg-red-500' :
+                                'bg-gray-400'
+                             }`}></span>
+                          </div>
+                       )})}
+                    </div>
+                 </div>
+
+                 <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-3xl shadow-xl text-white relative overflow-hidden group">
+                    <div className="absolute top-[-20%] right-[-20%] w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-2 mb-4 font-bold text-indigo-100"><BrainCircuit size={20} /> <h3>Resumen IA</h3></div>
+                        {!aiSummary ? (
+                           <button onClick={() => generateAiSummary(patientData.name, patientData.appointments)} disabled={isGeneratingAi} className="w-full bg-white/20 hover:bg-white/30 backdrop-blur-md text-white border border-white/20 py-3 rounded-xl text-sm font-bold shadow-lg transition-all disabled:opacity-50">{isGeneratingAi ? 'Analizando...' : 'Generar Resumen'}</button>
+                        ) : (
+                           <div className="bg-white/10 backdrop-blur-md border border-white/10 p-4 rounded-2xl text-xs text-indigo-50 max-h-60 overflow-y-auto leading-relaxed custom-scrollbar"><div dangerouslySetInnerHTML={{ __html: aiSummary.replace(/\n/g, '<br/>') }} /></div>
+                        )}
+                    </div>
+                 </div>
+
+                 <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60">
+                    <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2"><DollarSign size={18} /> Pagos</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left">
+                        <thead>
+                          <tr className="border-b dark:border-gray-700 text-gray-500 dark:text-gray-400"><th className="pb-2">Fecha</th><th className="pb-2">Método</th><th className="pb-2 text-right">Monto</th></tr>
+                        </thead>
+                        <tbody className="divide-y dark:divide-gray-700 text-gray-700 dark:text-gray-300">
+                          {paymentHistory.map(p => (
+                            <tr key={p.id}><td className="py-2">{p.date}</td><td className="py-2">{p.paymentMethod}</td><td className="py-2 text-right font-bold">${p.cost}</td></tr>
+                          ))}
+                          {paymentHistory.length === 0 && <tr><td colSpan={3} className="py-4 text-center text-gray-400">Sin pagos registrados</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                 </div>
+              </div>
+           </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-8 animate-fade-in">
+         <div className="flex flex-col gap-4">
+             <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Pacientes</h2>
+             <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                <input
+                  type="text"
+                  placeholder="Buscar por nombre, DNI o obra social..."
+                  className="w-full pl-12 pr-4 py-4 border-none shadow-lg rounded-2xl bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                  value={patientSearchTerm}
+                  onChange={(e) => setPatientSearchTerm(e.target.value)}
+                />
+             </div>
+         </div>
+
+         {uniquePatients.length === 0 ? (
+             <div className="text-center py-20 text-gray-400 dark:text-gray-500">
+               <Users size={48} className="mx-auto mb-4 opacity-20"/>
+               No se encontraron pacientes que coincidan con la búsqueda.
+             </div>
+         ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {uniquePatients.map((patient, idx) => {
+                  const profile = allProfiles[patient.id];
+                  return (
+                  <div key={idx} onClick={() => handlePatientSelect(patient.id, patient.name)} className="glass-panel p-6 rounded-3xl shadow-sm border border-white/60 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-primary-100 to-transparent rounded-bl-full opacity-50 group-hover:opacity-100 transition-opacity"></div>
+                      
+                      <div className="flex items-center justify-between mb-4 relative z-10">
+                        <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-blue-600 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-primary-500/30 group-hover:scale-110 transition-transform">{patient.name.charAt(0).toUpperCase()}</div>
+                        <span className="text-xs font-bold bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 px-3 py-1 rounded-full">{patient.totalVisits} visitas</span>
+                      </div>
+                      
+                      <h3 className="font-bold text-gray-900 dark:text-white text-xl mb-2 relative z-10">{patient.name}</h3>
+                      
+                      {profile && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-4 space-y-1 relative z-10">
+                            {profile.insurance && <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>{profile.insurance}</div>}
+                            {profile.dni && <div className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>DNI: {profile.dni}</div>}
+                        </div>
+                      )}
+                      
+                      <div className="text-xs text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-4 flex justify-between items-center relative z-10">
+                        <span>Última visita: {patient.lastVisit}</span>
+                        <ChevronRight size={16} className="text-primary-500 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all"/>
+                      </div>
+                  </div>
+                )})}
+            </div>
+         )}
+      </div>
+    );
+  };
+
+  const renderFinances = () => {
+    const totalIncome = appointments
+      .filter(a => a.status === AppointmentStatus.COMPLETED || a.status === AppointmentStatus.CONFIRMED)
+      .reduce((sum, a) => sum + (a.cost || 0), 0);
+
+    const paidIncome = appointments
+      .filter(a => a.paymentStatus === PaymentStatus.PAID)
+      .reduce((sum, a) => sum + (a.cost || 0), 0);
+    
+    const pendingIncome = totalIncome - paidIncome;
+
+    const data = [
+      { name: 'Cobrado', value: paidIncome },
+      { name: 'Pendiente', value: pendingIncome },
+    ];
+
+    const paymentMethodsStats = appointments
+      .filter(a => a.paymentStatus === PaymentStatus.PAID)
+      .reduce((acc, curr) => {
+        const method = curr.paymentMethod || 'Desconocido';
+        acc[method] = (acc[method] || 0) + curr.cost;
+        return acc;
+      }, {} as Record<string, number>);
+
+    const barData = Object.entries(paymentMethodsStats).map(([name, value]) => ({
+      name,
+      value
+    }));
+
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Finanzas</h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+           <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 flex items-center justify-between">
+              <div>
+                 <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Total Cobrado</p>
+                 <p className="text-3xl font-black text-green-600 dark:text-green-400">${paidIncome}</p>
+              </div>
+              <div className="p-4 bg-green-100 dark:bg-green-900/30 rounded-2xl text-green-600 dark:text-green-400">
+                 <DollarSign size={24} />
+              </div>
+           </div>
+           <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 flex items-center justify-between">
+              <div>
+                 <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Pendiente de Cobro</p>
+                 <p className="text-3xl font-black text-red-500 dark:text-red-400">${pendingIncome}</p>
+              </div>
+              <div className="p-4 bg-red-100 dark:bg-red-900/30 rounded-2xl text-red-500 dark:text-red-400">
+                 <AlertCircle size={24} />
+              </div>
+           </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+           <div className="glass-panel p-8 rounded-3xl shadow-lg border border-white/60 h-96 flex flex-col">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-6">Estado de Pagos</h3>
+               <div className="flex-1 min-h-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={data}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={5}
+                      dataKey="value"
+                      stroke="none"
+                    >
+                      {data.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                        contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', backgroundColor: 'rgba(255,255,255,0.9)'}}
+                    />
+                    <Legend verticalAlign="bottom" height={36}/>
+                  </PieChart>
+                </ResponsiveContainer>
+               </div>
+           </div>
+
+           <div className="glass-panel p-8 rounded-3xl shadow-lg border border-white/60 h-96 flex flex-col">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-6">Métodos de Pago</h3>
+               <div className="flex-1 min-h-0">
+                {barData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.3} vertical={false} />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#9ca3af'}} />
+                      <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#9ca3af'}} />
+                      <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
+                      <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                        {barData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={BAR_COLORS[index % BAR_COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-gray-400">
+                    No hay datos de pagos aún
+                  </div>
+                )}
+               </div>
+           </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderSettings = () => {
     const days: string[] = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    // 8:00 to 22:00
     const hours: number[] = Array.from({ length: 15 }, (_, i) => i + 8); 
 
     const toggleHour = (dayIndex: number, hour: number) => {
@@ -593,14 +843,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         }
         dayConfig.isEnabled = dayConfig.activeHours.length > 0;
         
-        // Backward compatibility (approximate)
-        if (dayConfig.activeHours && dayConfig.activeHours.length > 0) {
-           const min = Math.min(...dayConfig.activeHours);
-           const max = Math.max(...dayConfig.activeHours);
-           (dayConfig as any).startTime = `${min}`.padStart(2,'0') + ':00';
-           (dayConfig as any).endTime = `${max + 1}`.padStart(2,'0') + ':00';
-        }
-        
         saveSchedule(newSchedule);
       }
     };
@@ -609,54 +851,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       <div className="space-y-8 animate-fade-in">
         <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Configuración</h2>
 
-        {/* Professional Profile Settings */}
          <div className="glass-panel p-8 rounded-3xl shadow-lg border border-white/60">
-            <h3 className="font-bold text-lg mb-6 flex items-center gap-2 text-gray-800 dark:text-white"><UserCog size={20} /> Perfil Profesional</h3>
-            <form onSubmit={handleProfessionalConfigSave} className="grid grid-cols-1 gap-6">
-               <div>
-                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Nombre y Título</label>
+            <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-gray-800 dark:text-white"><UserCog size={20} /> Perfil Profesional</h3>
+            <form onSubmit={handleProfessionalNameSave} className="flex flex-col md:flex-row gap-4 items-end">
+               <div className="flex-1 w-full">
+                  <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Nombre y Título (Visible en Portal Cliente)</label>
                   <input 
                     type="text" 
-                    value={professionalConfig.name}
-                    onChange={(e) => setProfessionalConfig({...professionalConfig, name: e.target.value})}
+                    value={professionalName}
+                    onChange={(e) => setProfessionalName(e.target.value)}
                     className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder="Ej: Lic. Gabriel Medina"
                   />
                </div>
-               
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 <div>
-                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Especialidad</label>
-                    <input 
-                      type="text" 
-                      value={professionalConfig.specialty}
-                      onChange={(e) => setProfessionalConfig({...professionalConfig, specialty: e.target.value})}
-                      className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
-                      placeholder="Ej: Psicología Clínica"
-                    />
-                 </div>
-                 <div>
-                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Dirección del Consultorio</label>
-                    <input 
-                      type="text" 
-                      value={professionalConfig.address}
-                      onChange={(e) => setProfessionalConfig({...professionalConfig, address: e.target.value})}
-                      className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
-                      placeholder="Ej: Av. Corrientes 1234, CABA"
-                    />
-                 </div>
-               </div>
-
-               <div className="flex justify-end pt-4">
-                 <button type="submit" className="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-black shadow-lg">Guardar Cambios</button>
-               </div>
+               <button type="submit" className="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-black shadow-lg">Guardar Cambios</button>
             </form>
          </div>
 
-         {/* Schedule Grid */}
          <div>
              <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-6 rounded-3xl text-white shadow-lg mb-6">
-                <h3 className="font-bold text-lg mb-2">Configuración de Horarios</h3>
+                <h3 className="font-bold text-lg mb-2">Configuración de Horarios (Modo DVR)</h3>
                 <p className="text-blue-100 text-sm opacity-90">
                   Haga clic en los bloques para habilitar o deshabilitar horas de atención. Los bloques azules indican disponibilidad.
                 </p>
@@ -703,464 +917,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     );
   };
 
-  const renderPatients = () => {
-    // If a patient is selected, show detail view
-    if (selectedPatientId && patientProfile) {
-        // Filter appointments for this patient
-        const patientAppts = appointments.filter(a => a.patientId === selectedPatientId || a.patientName === patientProfile.firstName + ' ' + patientProfile.lastName); // Fallback to name match if IDs don't align perfectly in mock data
-
-        // Sort appointments desc
-        const sortedHistory = patientAppts.sort((a,b) => new Date(b.date + 'T' + b.time).getTime() - new Date(a.date + 'T' + a.time).getTime());
-
-        return (
-            <div className="animate-fade-in space-y-6">
-                <button onClick={() => setSelectedPatientId(null)} className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors mb-4">
-                    <ChevronLeft size={20} /> Volver a la lista
-                </button>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Profile Column */}
-                    <div className="lg:col-span-1 space-y-6">
-                        <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 relative overflow-hidden">
-                             <div className="absolute top-0 right-0 w-32 h-32 bg-purple-400/20 rounded-full mix-blend-multiply filter blur-3xl"></div>
-                             
-                             {/* Header Toggleable */}
-                             <div 
-                                className="flex items-center justify-between mb-2 relative z-10 cursor-pointer"
-                                onClick={() => setIsPatientInfoCollapsed(!isPatientInfoCollapsed)}
-                             >
-                                <div className="flex items-center gap-4">
-                                    <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-purple-500/30">
-                                        {patientProfile.firstName.charAt(0)}{patientProfile.lastName.charAt(0)}
-                                    </div>
-                                    <div>
-                                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">{patientProfile.firstName} {patientProfile.lastName}</h2>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">Paciente</p>
-                                    </div>
-                                </div>
-                                <div className="bg-gray-100 dark:bg-gray-700 p-2 rounded-full hover:bg-gray-200 transition">
-                                    {isPatientInfoCollapsed ? <ChevronDown size={20}/> : <ChevronUp size={20}/>}
-                                </div>
-                             </div>
-                             
-                             {!isPatientInfoCollapsed && (
-                                <form onSubmit={handleProfileSave} className="space-y-4 relative z-10 mt-6 pt-6 border-t border-gray-100 dark:border-gray-700 animate-fade-in">
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-500 uppercase">Teléfono</label>
-                                        <input 
-                                            className="w-full bg-white/50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-2 text-sm mt-1" 
-                                            value={patientProfile.phone || ''}
-                                            onChange={e => setPatientProfile({...patientProfile, phone: e.target.value})}
-                                            placeholder="No registrado"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-500 uppercase">Email</label>
-                                        <input 
-                                            className="w-full bg-white/50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-2 text-sm mt-1" 
-                                            value={patientProfile.email || ''}
-                                            onChange={e => setPatientProfile({...patientProfile, email: e.target.value})}
-                                            placeholder="No registrado"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-500 uppercase">Diagnóstico</label>
-                                        <input 
-                                            className="w-full bg-white/50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-2 text-sm mt-1" 
-                                            value={patientProfile.diagnosis}
-                                            onChange={e => setPatientProfile({...patientProfile, diagnosis: e.target.value})}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-500 uppercase">Obra Social</label>
-                                        <input 
-                                            className="w-full bg-white/50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-2 text-sm mt-1" 
-                                            value={patientProfile.insurance}
-                                            onChange={e => setPatientProfile({...patientProfile, insurance: e.target.value})}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-500 uppercase">Notas Generales / Historia Clínica</label>
-                                        <textarea 
-                                            className="w-full bg-white/50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-2 text-sm mt-1" 
-                                            rows={5}
-                                            value={patientProfile.notes}
-                                            onChange={e => setPatientProfile({...patientProfile, notes: e.target.value})}
-                                        />
-                                    </div>
-                                    <button type="submit" className="w-full bg-gray-900 dark:bg-white dark:text-gray-900 text-white py-2 rounded-xl font-bold text-sm hover:bg-black transition shadow-lg">Guardar Perfil</button>
-                                </form>
-                             )}
-                        </div>
-                        
-                        {/* AI Summary Card */}
-                        <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 bg-gradient-to-br from-white to-blue-50 dark:from-gray-800 dark:to-gray-900">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="font-bold flex items-center gap-2 text-blue-900 dark:text-blue-300"><BrainCircuit size={18}/> Resumen IA</h3>
-                                <div className="flex gap-2">
-                                    {aiSummary && (
-                                        <button 
-                                            onClick={copyAiSummary}
-                                            className="text-xs bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 p-1.5 rounded-lg transition-colors shadow-sm"
-                                            title="Copiar resumen"
-                                        >
-                                            <Copy size={14}/>
-                                        </button>
-                                    )}
-                                    <button 
-                                        onClick={() => generateAiSummary(patientProfile.firstName + ' ' + patientProfile.lastName, patientAppts)}
-                                        disabled={isGeneratingAi}
-                                        className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-full font-bold transition-colors disabled:opacity-50"
-                                    >
-                                        {isGeneratingAi ? 'Generando...' : 'Generar'}
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed min-h-[100px] bg-white/50 dark:bg-gray-700/50 p-4 rounded-xl border border-blue-100 dark:border-gray-600">
-                                {aiSummary ? (
-                                    <div dangerouslySetInnerHTML={{ __html: aiSummary.replace(/\n/g, '<br/>').replace(/\*\*(.*?)\*\*/g, '<b>$1</b>') }} />
-                                ) : (
-                                    <span className="text-gray-400 italic">Genere un resumen basado en el historial clínico...</span>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* History Column */}
-                    <div className="lg:col-span-2 space-y-6">
-                        
-                        {/* Pinned General Notes / Alerts */}
-                        {patientProfile.notes && (
-                            <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 p-5 rounded-r-xl shadow-sm mb-6 flex items-start gap-3">
-                                <AlertCircle className="text-yellow-500 shrink-0 mt-0.5" size={24} />
-                                <div>
-                                    <h4 className="font-bold text-yellow-800 dark:text-yellow-500 uppercase text-xs mb-1 tracking-wider">Aviso Importante / Notas Generales</h4>
-                                    <p className="text-gray-800 dark:text-gray-200 text-sm whitespace-pre-wrap leading-relaxed">{patientProfile.notes}</p>
-                                </div>
-                            </div>
-                        )}
-
-                        <h3 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2"><History size={20}/> Historial de Sesiones</h3>
-                        <div className="space-y-4">
-                            {sortedHistory.length === 0 ? (
-                                <div className="text-center py-12 text-gray-400 bg-white/30 dark:bg-gray-800/30 rounded-3xl border border-dashed border-gray-300 dark:border-gray-600">No hay historial de turnos.</div>
-                            ) : (
-                                sortedHistory.map(appt => {
-                                    const isExpanded = expandedSessionId === appt.id;
-                                    
-                                    return (
-                                        <div key={appt.id} className={`glass-panel rounded-2xl border border-white/50 hover:shadow-md transition-all duration-300 overflow-hidden ${isExpanded ? 'p-6' : 'p-4 cursor-pointer bg-white/40 hover:bg-white/60'}`}>
-                                            <div 
-                                                className="flex justify-between items-center"
-                                                onClick={() => !isExpanded && toggleSessionExpansion(appt.id)}
-                                            >
-                                                <div>
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="font-bold text-gray-900 dark:text-white text-lg">{appt.date} <span className="text-sm font-normal text-gray-500 ml-2">{appt.time} hs</span></div>
-                                                        {!isExpanded && (
-                                                            <div className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${appt.clinicalObservations ? 'bg-green-50 text-green-700 border-green-100' : 'bg-gray-50 text-gray-400 border-gray-100'}`}>
-                                                                {appt.clinicalObservations ? 'Con Notas' : 'Sin Notas'}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    
-                                                    {/* Compact View Summary */}
-                                                    {!isExpanded && (
-                                                        <p className="text-xs text-gray-500 mt-1 truncate max-w-md">
-                                                            {appt.clinicalObservations || <span className="italic opacity-50">Clic para escribir observaciones...</span>}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                                
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase 
-                                                        ${appt.status === AppointmentStatus.COMPLETED ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                                                        {appt.status}
-                                                    </div>
-                                                    <div className="text-gray-400">
-                                                        {isExpanded ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Expanded Content */}
-                                            {isExpanded && (
-                                                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-4 animate-fade-in">
-                                                    {appt.notes && (
-                                                        <div className="bg-yellow-50/50 dark:bg-yellow-900/10 p-3 rounded-xl border border-yellow-100 dark:border-yellow-900/30">
-                                                            <p className="text-xs font-bold text-yellow-700 dark:text-yellow-500 uppercase mb-1">Nota del Paciente</p>
-                                                            <p className="text-sm text-gray-700 dark:text-gray-300 italic">{appt.notes}</p>
-                                                        </div>
-                                                    )}
-                                                    
-                                                    <div>
-                                                        <p className="text-xs font-bold text-gray-500 uppercase mb-2 ml-1">Observaciones Clínicas de la Sesión</p>
-                                                        <textarea 
-                                                            className="w-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl p-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-inner"
-                                                            rows={6}
-                                                            placeholder="Escriba sus observaciones privadas aquí..."
-                                                            value={appt.clinicalObservations || ''}
-                                                            onChange={e => handleNoteChange(appt.id, e.target.value)}
-                                                        />
-                                                        
-                                                        {unsavedNotes.has(appt.id) ? (
-                                                            <div className="mt-3 animate-slide-up">
-                                                                <button 
-                                                                    onClick={() => handleSaveNote(appt.id, appt.clinicalObservations || '')} 
-                                                                    className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-sm shadow-lg flex items-center justify-center gap-2 transition-all"
-                                                                >
-                                                                    <Save size={18}/> Guardar Observación
-                                                                </button>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex justify-end mt-2">
-                                                                <button 
-                                                                    onClick={() => toggleSessionExpansion(appt.id)}
-                                                                    className="text-gray-400 hover:text-gray-600 text-xs flex items-center gap-1"
-                                                                >
-                                                                    Minimizar <ChevronUp size={12}/>
-                                                                </button>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // List view
-    // Create unique patients list from appointments + stored profiles
-    
-    // For simplicity in this demo, let's iterate over appointments to find unique patients
-    const patientsMap = new Map<string, {id: string, name: string, phone: string, lastVisit: string}>();
-    
-    // 1. First, populate from existing appointments
-    appointments.forEach(appt => {
-        if (!patientsMap.has(appt.patientId)) {
-            patientsMap.set(appt.patientId, {
-                id: appt.patientId,
-                name: appt.patientName,
-                phone: appt.patientPhone || '',
-                lastVisit: appt.date
-            });
-        } else {
-            const current = patientsMap.get(appt.patientId)!;
-            if (new Date(appt.date) > new Date(current.lastVisit)) {
-                current.lastVisit = appt.date;
-            }
-        }
-    });
-
-    // 2. Then, populate from profiles that might NOT have appointments yet
-    Object.values(allProfiles).forEach((profile: PatientProfile) => {
-        if (!patientsMap.has(profile.id)) {
-            patientsMap.set(profile.id, {
-                id: profile.id,
-                name: `${profile.firstName} ${profile.lastName}`,
-                phone: profile.phone || '',
-                lastVisit: 'Sin historial'
-            });
-        }
-    });
-
-    const patientList = Array.from(patientsMap.values()).filter(p => 
-        p.name.toLowerCase().includes(patientSearchTerm.toLowerCase()) || 
-        p.phone.includes(patientSearchTerm)
-    );
-
-    return (
-      <div className="space-y-8 animate-fade-in">
-        <div className="flex justify-between items-center">
-             <div className="flex items-center gap-4">
-               <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Pacientes</h2>
-               <button 
-                  onClick={() => setShowNewPatientModal(true)}
-                  className="bg-primary-600 hover:bg-primary-700 text-white p-2 rounded-xl shadow-lg transition-colors"
-                  title="Agregar Paciente Nuevo"
-               >
-                  <UserPlus size={20} />
-               </button>
-             </div>
-             
-             <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input 
-                    type="text" 
-                    placeholder="Buscar paciente..." 
-                    className="pl-10 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
-                    value={patientSearchTerm}
-                    onChange={e => setPatientSearchTerm(e.target.value)}
-                />
-             </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {patientList.length === 0 ? (
-                <div className="col-span-3 text-center py-12 text-gray-400 bg-white/30 dark:bg-gray-800/30 rounded-3xl border border-dashed border-gray-300 dark:border-gray-600">
-                    <Users size={48} className="mx-auto mb-3 opacity-20"/>
-                    No se encontraron pacientes.
-                </div>
-            ) : (
-                patientList.map(patient => (
-                    <div key={patient.id} onClick={() => handlePatientSelect(patient.id, patient.name)} className="glass-panel p-6 rounded-3xl shadow-sm border border-white/60 hover:shadow-lg hover:-translate-y-1 transition-all cursor-pointer group">
-                        <div className="flex items-center gap-4 mb-4">
-                            <div className="w-12 h-12 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-600 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-300 font-bold text-lg group-hover:from-primary-500 group-hover:to-teal-400 group-hover:text-white transition-all">
-                                {patient.name.charAt(0)}
-                            </div>
-                            <div>
-                                <h3 className="font-bold text-gray-900 dark:text-white">{patient.name}</h3>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1"><Smartphone size={10}/> {patient.phone || 'N/A'}</p>
-                            </div>
-                        </div>
-                        <div className="text-xs text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-3 flex justify-between">
-                            <span>Última visita:</span>
-                            <span className="font-mono font-medium text-gray-600 dark:text-gray-300">{patient.lastVisit}</span>
-                        </div>
-                    </div>
-                ))
-            )}
-        </div>
-      </div>
-    );
-  };
-
-  const renderFinances = () => {
-    // Calculations
-    const totalIncome = appointments
-        .filter(a => a.paymentStatus === PaymentStatus.PAID)
-        .reduce((sum, a) => sum + a.cost, 0);
-    
-    const pendingIncome = appointments
-        .filter(a => a.paymentStatus === PaymentStatus.UNPAID && a.status !== AppointmentStatus.CANCELLED)
-        .reduce((sum, a) => sum + a.cost, 0);
-
-    // Chart Data - Monthly Income
-    const monthlyIncome: Record<string, number> = {};
-    appointments.filter(a => a.paymentStatus === PaymentStatus.PAID).forEach(a => {
-        const month = a.date.substring(0, 7); // YYYY-MM
-        monthlyIncome[month] = (monthlyIncome[month] || 0) + a.cost;
-    });
-    
-    const barData = Object.keys(monthlyIncome).sort().map(month => ({
-        name: month,
-        amount: monthlyIncome[month]
-    }));
-
-    // Chart Data - Payment Methods
-    const methodCounts: Record<string, number> = {};
-    appointments.filter(a => a.paymentStatus === PaymentStatus.PAID).forEach(a => {
-        methodCounts[a.paymentMethod] = (methodCounts[a.paymentMethod] || 0) + 1;
-    });
-
-    const pieData = Object.keys(methodCounts).map(method => ({
-        name: method,
-        value: methodCounts[method]
-    }));
-
-    return (
-      <div className="space-y-8 animate-fade-in">
-        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Finanzas</h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="glass-panel p-8 rounded-3xl shadow-lg border-t border-white/60 relative overflow-hidden bg-gradient-to-br from-green-500 to-emerald-600 text-white">
-                <div className="absolute top-0 right-0 w-40 h-40 bg-white rounded-full mix-blend-overlay filter blur-3xl opacity-20"></div>
-                <p className="text-emerald-100 font-medium mb-1 flex items-center gap-2"><DollarSign size={16}/> Ingresos Totales</p>
-                <p className="text-4xl font-black tracking-tight">${totalIncome.toLocaleString()}</p>
-            </div>
-            
-            <div className="glass-panel p-8 rounded-3xl shadow-lg border-t border-white/60 relative overflow-hidden bg-gradient-to-br from-orange-400 to-red-500 text-white">
-                <div className="absolute top-0 right-0 w-40 h-40 bg-white rounded-full mix-blend-overlay filter blur-3xl opacity-20"></div>
-                <p className="text-orange-100 font-medium mb-1 flex items-center gap-2"><Clock size={16}/> Pendiente de Cobro</p>
-                <p className="text-4xl font-black tracking-tight">${pendingIncome.toLocaleString()}</p>
-            </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60">
-                <h3 className="font-bold text-gray-800 dark:text-white mb-6">Ingresos Mensuales</h3>
-                <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={barData}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} />
-                            <YAxis axisLine={false} tickLine={false} tick={{fill: '#9CA3AF', fontSize: 12}} tickFormatter={(value) => `$${value}`} />
-                            <Tooltip 
-                                contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'}}
-                                cursor={{fill: '#F3F4F6'}}
-                            />
-                            <Bar dataKey="amount" fill="#10B981" radius={[6, 6, 0, 0]} barSize={40} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
-
-            <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60">
-                <h3 className="font-bold text-gray-800 dark:text-white mb-6">Métodos de Pago</h3>
-                <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie
-                                data={pieData}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={60}
-                                outerRadius={80}
-                                paddingAngle={5}
-                                dataKey="value"
-                            >
-                                {pieData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
-                            </Pie>
-                            <Tooltip />
-                            <Legend verticalAlign="bottom" height={36} iconType="circle"/>
-                        </PieChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
-        </div>
-      </div>
-    );
-  };
-
   if (loading) return (
-    <div className={isDarkMode ? 'dark' : ''}>
-      <div className="flex h-screen bg-transparent">
-        {/* Sidebar Skeleton */}
-        <aside className="w-20 md:w-72 glass-panel border-r border-white/50 hidden md:flex flex-col p-6 space-y-6">
-          <div className="h-10 w-32 bg-gray-200 dark:bg-gray-700 rounded-xl animate-pulse mb-4"></div>
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-12 w-full bg-gray-100/50 dark:bg-gray-700/50 rounded-2xl animate-pulse"></div>
-          ))}
-          <div className="mt-auto h-12 w-full bg-gray-100/50 dark:bg-gray-700/50 rounded-2xl animate-pulse"></div>
-        </aside>
-
-        {/* Main Content Skeleton */}
-        <main className="flex-1 p-4 md:p-10 relative">
-           <div className="max-w-7xl mx-auto space-y-8">
-              {/* Header */}
-              <div className="h-10 w-48 bg-gray-200 dark:bg-gray-700 rounded-xl animate-pulse"></div>
-              
-              {/* Stats Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                 {[1,2,3].map(i => (
-                    <div key={i} className="h-32 rounded-3xl bg-white/40 dark:bg-gray-800/40 border border-white/30 animate-pulse"></div>
-                 ))}
-              </div>
-
-              {/* Big List/Table */}
-              <div className="h-96 rounded-3xl bg-white/40 dark:bg-gray-800/40 border border-white/30 animate-pulse"></div>
-           </div>
-        </main>
-      </div>
+    <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
     </div>
   );
 
@@ -1200,10 +959,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                 <span className="hidden md:block">{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
             </button>
             <button onClick={onLogout} className="w-full flex items-center gap-4 px-5 py-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-2xl transition-all font-medium"><LogOut size={20} /> <span className="hidden md:block">Cerrar Sesión</span></button>
-            
-            <div className="pt-4 text-center hidden md:block">
-                <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">Dev: Eduardo Ricci</p>
-            </div>
         </div>
       </aside>
 
@@ -1217,7 +972,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       </div>
 
       <main className="flex-1 overflow-y-auto p-4 md:p-10 pb-28 md:pb-10 relative">
-          {/* Background Blobs for Dashboard */}
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-300/30 rounded-full mix-blend-multiply filter blur-3xl opacity-50 -z-10 animate-blob pointer-events-none"></div>
           <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-teal-300/30 rounded-full mix-blend-multiply filter blur-3xl opacity-50 -z-10 animate-blob animation-delay-2000 pointer-events-none"></div>
 
@@ -1236,37 +990,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
           <div className="glass-panel bg-white/95 p-8 rounded-3xl shadow-2xl max-w-md w-full animate-slide-up">
             <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Reserva Manual</h3>
             <form onSubmit={handleManualSubmit} className="space-y-4">
-              <div className="relative" ref={suggestionsRef}>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Paciente</label>
-                <div className="relative">
-                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                   <input 
-                      required 
-                      type="text" 
-                      className="w-full border border-gray-200 rounded-xl pl-10 pr-3 py-3 bg-gray-50 focus:ring-2 focus:ring-primary-500 outline-none" 
-                      value={manualForm.name} 
-                      onChange={e => handleManualNameChange(e.target.value)} 
-                      placeholder="Buscar o escribir nuevo..."
-                      autoComplete="off"
-                   />
-                </div>
-                {/* Autocomplete Suggestions */}
-                {showBookingSuggestions && (
-                   <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 z-50 max-h-48 overflow-y-auto">
-                      {bookingSuggestions.map(p => (
-                         <div 
-                            key={p.id}
-                            onClick={() => selectBookingPatient(p)}
-                            className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer border-b border-gray-50 dark:border-gray-700/50 last:border-0 flex justify-between items-center"
-                         >
-                            <span className="font-medium text-gray-800 dark:text-gray-200">{p.firstName} {p.lastName}</span>
-                            <span className="text-xs text-gray-400">{p.phone}</span>
-                         </div>
-                      ))}
-                   </div>
-                )}
-              </div>
-              
+              <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Paciente</label><input required type="text" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={manualForm.name} onChange={e => setManualForm({...manualForm, name: e.target.value})} /></div>
               <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Teléfono</label><input type="tel" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={manualForm.phone} onChange={e => setManualForm({...manualForm, phone: e.target.value})} /></div>
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Fecha</label><input required type="date" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={manualForm.date} onChange={e => setManualForm({...manualForm, date: e.target.value})} /></div>
@@ -1275,41 +999,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               <div className="flex justify-end gap-3 mt-6">
                 <button type="button" onClick={() => setShowManualModal(false)} className="px-4 py-2 text-gray-500 hover:text-gray-800 font-medium">Cancelar</button>
                 <button type="submit" className="bg-gray-900 text-white px-6 py-2 rounded-xl font-bold hover:bg-black shadow-lg">Guardar</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* New Patient Modal */}
-      {showNewPatientModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="glass-panel bg-white/95 p-8 rounded-3xl shadow-2xl max-w-md w-full animate-slide-up">
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Nuevo Paciente</h3>
-            <form onSubmit={handleCreatePatient} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                  <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre</label><input required type="text" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={newPatientForm.firstName} onChange={e => setNewPatientForm({...newPatientForm, firstName: e.target.value})} /></div>
-                  <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Apellido</label><input required type="text" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={newPatientForm.lastName} onChange={e => setNewPatientForm({...newPatientForm, lastName: e.target.value})} /></div>
-              </div>
-              <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">DNI</label><input type="text" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={newPatientForm.dni} onChange={e => setNewPatientForm({...newPatientForm, dni: e.target.value})} /></div>
-              <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Teléfono</label><input type="tel" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={newPatientForm.phone} onChange={e => setNewPatientForm({...newPatientForm, phone: e.target.value})} /></div>
-              <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email</label><input type="email" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={newPatientForm.email} onChange={e => setNewPatientForm({...newPatientForm, email: e.target.value})} /></div>
-              <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Obra Social</label><input type="text" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={newPatientForm.insurance} onChange={e => setNewPatientForm({...newPatientForm, insurance: e.target.value})} /></div>
-              
-              <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Historia Clínica / Notas Iniciales</label>
-                  <textarea 
-                      className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" 
-                      rows={4}
-                      value={newPatientForm.notes} 
-                      onChange={e => setNewPatientForm({...newPatientForm, notes: e.target.value})} 
-                      placeholder="Ingrese antecedentes, motivo de consulta inicial, etc."
-                  />
-              </div>
-
-              <div className="flex justify-end gap-3 mt-6">
-                <button type="button" onClick={() => setShowNewPatientModal(false)} className="px-4 py-2 text-gray-500 hover:text-gray-800 font-medium">Cancelar</button>
-                <button type="submit" className="bg-gray-900 text-white px-6 py-2 rounded-xl font-bold hover:bg-black shadow-lg">Crear Paciente</button>
               </div>
             </form>
           </div>
