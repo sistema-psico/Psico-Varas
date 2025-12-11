@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, Clock, Check, User, ChevronRight, ChevronLeft, AlertCircle, Search, CalendarCheck, Sparkles, MapPin } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Check, User, ChevronRight, ChevronLeft, AlertCircle, Search, CalendarCheck, Sparkles, MapPin, Briefcase } from 'lucide-react';
 import { DataService } from '../services/dataService';
 import { AppointmentStatus, PaymentMethod, PaymentStatus, Appointment } from '../types';
 
@@ -133,7 +133,9 @@ export const ClientPortal: React.FC = () => {
               <div className="w-10 h-10 bg-gradient-to-tr from-teal-500 to-emerald-400 rounded-xl flex items-center justify-center text-white font-bold shadow-md shadow-teal-500/20">{professionalName.charAt(0) || 'P'}</div>
               <div>
                 <span className="font-bold text-gray-800 block leading-tight">{professionalName}</span>
-                <span className="text-xs text-gray-500 font-medium">{professionalSpecialty}</span>
+                <span className="text-xs text-gray-500 font-medium flex items-center gap-1">
+                   <Briefcase size={10} /> {professionalSpecialty}
+                </span>
               </div>
             </div>
             {/* Simple Tab Switcher for Desktop/Mobile */}
