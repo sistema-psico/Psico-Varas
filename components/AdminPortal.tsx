@@ -48,33 +48,33 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const [schedule, setSchedule] = useState<WorkingHours[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Configuration State (Extended)
+  // Configuration State
   const [professionalName, setProfessionalName] = useState('');
   const [professionalSpecialty, setProfessionalSpecialty] = useState('');
   const [professionalAddress, setProfessionalAddress] = useState('');
-  const [professionalPrice, setProfessionalPrice] = useState<number>(5000); // Estado para el precio
+  const [professionalPrice, setProfessionalPrice] = useState<number>(5000);
 
   // Search State
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
   const [allProfiles, setAllProfiles] = useState<Record<string, PatientProfile>>({});
 
-  // Filter State for Calendar
+  // Filter State
   const [filterDate, setFilterDate] = useState<string | null>(null);
 
-  // Dark Mode State
+  // Dark Mode
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // Manual Booking State
+  // Manual Booking
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualForm, setManualForm] = useState({ name: '', date: '', time: '', phone: '' });
 
-  // Edit Appointment State
+  // Edit Appointment
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
 
-  // Payment Processing State
+  // Payment Processing
   const [paymentAppointment, setPaymentAppointment] = useState<Appointment | null>(null);
 
-  // Patient Detail State
+  // Patient Detail
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
   const [isProfileExpanded, setIsProfileExpanded] = useState(true);
@@ -109,7 +109,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       setProfessionalName(profData.name);
       setProfessionalSpecialty(profData.specialty);
       setProfessionalAddress(profData.address);
-      setProfessionalPrice(profData.price); // Cargar precio
+      setProfessionalPrice(profData.price);
 
     } catch (error) {
       console.error("Error loading data:", error);
@@ -130,7 +130,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   };
 
   const handleDeleteAppointment = async (id: string) => {
-    if (window.confirm('¿Está seguro de que desea eliminar este turno permanentemente? Esta acción no se puede deshacer.')) {
+    if (window.confirm('¿Está seguro de que desea eliminar este turno permanentemente?')) {
         const updated = await DataService.deleteAppointment(id);
         setAppointments(updated);
     }
@@ -153,7 +153,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         name: professionalName,
         specialty: professionalSpecialty,
         address: professionalAddress,
-        price: Number(professionalPrice) // Guardar precio
+        price: Number(professionalPrice)
       });
       alert('Configuración actualizada correctamente');
   };
@@ -185,7 +185,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       date: manualForm.date,
       time: manualForm.time,
       status: AppointmentStatus.CONFIRMED,
-      cost: Number(professionalPrice), // Usar precio configurado
+      cost: Number(professionalPrice),
       paymentStatus: PaymentStatus.UNPAID,
       paymentMethod: PaymentMethod.PENDING
     });
@@ -244,6 +244,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       diagnosis: '',
       notes: ''
     });
+  };
+
+  const handleDeletePatient = async (id: string) => {
+    if (window.confirm('¿Eliminar definitivamente a este paciente? Se perderán sus datos de perfil (los turnos históricos se mantendrán).')) {
+      await DataService.deletePatientProfile(id);
+      
+      // Update local state
+      const newProfiles = { ...allProfiles };
+      delete newProfiles[id];
+      setAllProfiles(newProfiles);
+      
+      setSelectedPatientId(null);
+      setPatientProfile(null);
+    }
   };
 
   const handleProfileSave = async (e: React.FormEvent) => {
@@ -541,6 +555,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Ficha: <span className="text-primary-600 dark:text-primary-400">{patientData.name.trim() || 'Nuevo Paciente'}</span></h2>
            </div>
 
+           {/* Personal Data Form - Collapsible */}
            <div className="glass-panel rounded-3xl shadow-sm border border-white/60 overflow-hidden">
               <div 
                 className="flex items-center justify-between p-6 cursor-pointer hover:bg-white/40 dark:hover:bg-gray-800/40 border-b border-gray-100 dark:border-gray-700 transition-colors"
@@ -580,7 +595,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                        <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase ml-1 mb-1 block">Diagnóstico Principal</label>
                        <input type="text" className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" value={patientProfile.diagnosis} onChange={e => setPatientProfile({...patientProfile!, diagnosis: e.target.value})} />
                     </div>
-                    <div className="md:col-span-2 flex justify-end">
+                    <div className="md:col-span-2 flex justify-end gap-3">
+                        {/* BOTÓN ELIMINAR PACIENTE */}
+                       <button 
+                        type="button" 
+                        onClick={() => handleDeletePatient(patientProfile!.id)}
+                        className="bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 px-6 py-2.5 rounded-xl font-medium flex items-center gap-2 hover:bg-red-100 dark:hover:bg-red-900/40"
+                       >
+                         <Trash2 size={18} /> Eliminar
+                       </button>
                        <button type="submit" className="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-6 py-2.5 rounded-xl font-medium flex items-center gap-2 hover:bg-black shadow-lg"><Save size={18} /> Guardar Datos</button>
                     </div>
                   </form>
@@ -588,8 +611,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               )}
            </div>
 
+           {/* Tabs for History */}
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-6">
+                
+                 {/* Clinical History */}
                  <div className="space-y-4">
                    <h3 className="font-bold text-gray-800 dark:text-gray-100 text-xl">Historia Clínica</h3>
                    {sortedHistory.length === 0 ? (
@@ -631,6 +657,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               </div>
 
               <div className="lg:col-span-1 space-y-6">
+                 {/* Appointment History List */}
                  <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60">
                     <div className="flex justify-between items-center mb-4">
                        <h3 className="font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2"><Clock size={18} /> Cronología</h3>
@@ -673,6 +700,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                     </div>
                  </div>
 
+                 {/* AI Summary */}
                  <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-3xl shadow-xl text-white relative overflow-hidden group">
                     <div className="absolute top-[-20%] right-[-20%] w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
                     <div className="relative z-10">
@@ -685,6 +713,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                     </div>
                  </div>
 
+                 {/* Payment History Table */}
                  <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60">
                     <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2"><DollarSign size={18} /> Pagos</h3>
                     <div className="overflow-x-auto">
@@ -707,6 +736,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       );
     }
 
+    // List View
     return (
       <div className="space-y-8 animate-fade-in">
          <div className="flex flex-col gap-4">
