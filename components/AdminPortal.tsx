@@ -5,8 +5,7 @@ import {
   DollarSign, 
   Settings, 
   LogOut, 
-  CheckCircle, 
-  XCircle, 
+  Check, 
   Clock, 
   Plus,
   CreditCard,
@@ -19,19 +18,15 @@ import {
   AlertCircle,
   ChevronUp,
   ChevronDown,
-  Check,
   Moon,
   Sun,
-  History,
   X,
   Search,
   LayoutDashboard,
   Wallet,
   Smartphone,
   Trash2,
-  UserCog,
-  MapPin,
-  Briefcase
+  UserCog
 } from 'lucide-react';
 import { Appointment, AppointmentStatus, PaymentMethod, PaymentStatus, WorkingHours, PatientProfile } from '../types';
 import { DataService } from '../services/dataService';
@@ -102,7 +97,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       const appts = await DataService.getAppointments();
       const sched = await DataService.getScheduleConfig();
       const profiles = await DataService.getAllPatientProfiles();
-      const profData = await DataService.getProfessionalProfile(); // UPDATED
+      const profData = await DataService.getProfessionalProfile(); 
       
       setAppointments(appts);
       setSchedule(sched);
@@ -252,7 +247,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       await DataService.savePatientProfile(patientProfile);
       setAllProfiles(prev => ({...prev, [patientProfile.id]: patientProfile}));
       setIsProfileExpanded(false);
-      // If it was a new patient, reload data to ensure lists update if we add logic for it later
       loadData();
     }
   };
@@ -349,7 +343,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
               <div className="p-4 bg-gradient-to-br from-teal-500 to-emerald-600 text-white rounded-2xl shadow-lg shadow-teal-500/30"><Users size={24} /></div>
               <div>
                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Pacientes</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{Object.keys(allProfiles).length || new Set(appointments.map(a => a.patientName)).size}</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{new Set(appointments.map(a => a.patientName)).size}</p>
               </div>
             </div>
           </div>
@@ -500,7 +494,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         };
       });
     
-    // Add manually created patients that might not have appointments yet
     Object.values(allProfiles).forEach(profile => {
       if (!uniquePatients.find(p => p.id === profile.id)) {
         uniquePatients.push({
@@ -674,18 +667,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                     </div>
                  </div>
 
-                 <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-3xl shadow-xl text-white relative overflow-hidden group">
-                    <div className="absolute top-[-20%] right-[-20%] w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
-                    <div className="relative z-10">
-                        <div className="flex items-center gap-2 mb-4 font-bold text-indigo-100"><BrainCircuit size={20} /> <h3>Resumen IA</h3></div>
-                        {!aiSummary ? (
-                           <button onClick={() => generateAiSummary(patientData.name, patientData.appointments)} disabled={isGeneratingAi} className="w-full bg-white/20 hover:bg-white/30 backdrop-blur-md text-white border border-white/20 py-3 rounded-xl text-sm font-bold shadow-lg transition-all disabled:opacity-50">{isGeneratingAi ? 'Analizando...' : 'Generar Resumen'}</button>
-                        ) : (
-                           <div className="bg-white/10 backdrop-blur-md border border-white/10 p-4 rounded-2xl text-xs text-indigo-50 max-h-60 overflow-y-auto leading-relaxed custom-scrollbar"><div dangerouslySetInnerHTML={{ __html: aiSummary.replace(/\n/g, '<br/>') }} /></div>
-                        )}
-                    </div>
-                 </div>
-
                  <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60">
                     <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2"><DollarSign size={18} /> Pagos</h3>
                     <div className="overflow-x-auto">
@@ -713,6 +694,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
          <div className="flex flex-col gap-4">
              <div className="flex justify-between items-center">
                 <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Pacientes</h2>
+                {/* Nuevo Botón de Paciente Manual */}
                 <button onClick={handleNewPatient} className="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 shadow-lg hover:bg-black dark:hover:bg-gray-200 transition-all">
                     <Plus size={18} /> Nuevo Paciente
                 </button>
@@ -768,10 +750,242 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     );
   };
 
+  const renderFinances = () => {
+    const totalIncome = appointments
+      .filter(a => a.status === AppointmentStatus.COMPLETED || a.status === AppointmentStatus.CONFIRMED)
+      .reduce((sum, a) => sum + (a.cost || 0), 0);
+
+    const paidIncome = appointments
+      .filter(a => a.paymentStatus === PaymentStatus.PAID)
+      .reduce((sum, a) => sum + (a.cost || 0), 0);
+    
+    const pendingIncome = totalIncome - paidIncome;
+
+    const data = [
+      { name: 'Cobrado', value: paidIncome },
+      { name: 'Pendiente', value: pendingIncome },
+    ];
+
+    const paymentMethodsStats = appointments
+      .filter(a => a.paymentStatus === PaymentStatus.PAID)
+      .reduce((acc, curr) => {
+        const method = curr.paymentMethod || 'Desconocido';
+        acc[method] = (acc[method] || 0) + curr.cost;
+        return acc;
+      }, {} as Record<string, number>);
+
+    const barData = Object.entries(paymentMethodsStats).map(([name, value]) => ({
+      name,
+      value
+    }));
+
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Finanzas</h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+           <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 flex items-center justify-between">
+              <div>
+                 <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Total Cobrado</p>
+                 <p className="text-3xl font-black text-green-600 dark:text-green-400">${paidIncome}</p>
+              </div>
+              <div className="p-4 bg-green-100 dark:bg-green-900/30 rounded-2xl text-green-600 dark:text-green-400">
+                 <DollarSign size={24} />
+              </div>
+           </div>
+           <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 flex items-center justify-between">
+              <div>
+                 <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Pendiente de Cobro</p>
+                 <p className="text-3xl font-black text-red-500 dark:text-red-400">${pendingIncome}</p>
+              </div>
+              <div className="p-4 bg-red-100 dark:bg-red-900/30 rounded-2xl text-red-500 dark:text-red-400">
+                 <AlertCircle size={24} />
+              </div>
+           </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+           <div className="glass-panel p-8 rounded-3xl shadow-lg border border-white/60 h-96 flex flex-col">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-6">Estado de Pagos</h3>
+               <div className="flex-1 min-h-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={data}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={5}
+                      dataKey="value"
+                      stroke="none"
+                    >
+                      {data.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                        contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', backgroundColor: 'rgba(255,255,255,0.9)'}}
+                    />
+                    <Legend verticalAlign="bottom" height={36}/>
+                  </PieChart>
+                </ResponsiveContainer>
+               </div>
+           </div>
+
+           <div className="glass-panel p-8 rounded-3xl shadow-lg border border-white/60 h-96 flex flex-col">
+              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-6">Métodos de Pago</h3>
+               <div className="flex-1 min-h-0">
+                {barData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.3} vertical={false} />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#9ca3af'}} />
+                      <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#9ca3af'}} />
+                      <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} />
+                      <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                        {barData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={BAR_COLORS[index % BAR_COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-gray-400">
+                    No hay datos de pagos aún
+                  </div>
+                )}
+               </div>
+           </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderSettings = () => {
+    const days: string[] = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const hours: number[] = Array.from({ length: 15 }, (_, i) => i + 8); 
+
+    const toggleHour = (dayIndex: number, hour: number) => {
+      const newSchedule = [...schedule];
+      const dayConfig = newSchedule.find(s => s.dayOfWeek === dayIndex);
+      if (dayConfig) {
+        if (!dayConfig.activeHours) dayConfig.activeHours = [];
+        
+        if (dayConfig.activeHours.includes(hour)) {
+          dayConfig.activeHours = dayConfig.activeHours.filter(h => h !== hour);
+        } else {
+          dayConfig.activeHours.push(hour);
+        }
+        dayConfig.isEnabled = dayConfig.activeHours.length > 0;
+        
+        saveSchedule(newSchedule);
+      }
+    };
+
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Configuración</h2>
+
+         <div className="glass-panel p-8 rounded-3xl shadow-lg border border-white/60">
+            <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-gray-800 dark:text-white"><UserCog size={20} /> Perfil Profesional</h3>
+            <form onSubmit={handleProfessionalConfigSave} className="space-y-4">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Nombre y Título</label>
+                    <input 
+                      type="text" 
+                      value={professionalName}
+                      onChange={(e) => setProfessionalName(e.target.value)}
+                      className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="Ej: Lic. Gabriel Medina"
+                    />
+                 </div>
+                 <div>
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Especialidad</label>
+                    <input 
+                      type="text" 
+                      value={professionalSpecialty}
+                      onChange={(e) => setProfessionalSpecialty(e.target.value)}
+                      className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="Ej: Psicología Clínica"
+                    />
+                 </div>
+                 <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Dirección Consultorio</label>
+                    <input 
+                      type="text" 
+                      value={professionalAddress}
+                      onChange={(e) => setProfessionalAddress(e.target.value)}
+                      className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="Ej: Av. Corrientes 1234, Piso 5"
+                    />
+                 </div>
+               </div>
+               <div className="flex justify-end mt-4">
+                  <button type="submit" className="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-black shadow-lg">Guardar Cambios</button>
+               </div>
+            </form>
+         </div>
+
+         <div>
+             <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-6 rounded-3xl text-white shadow-lg mb-6">
+                <h3 className="font-bold text-lg mb-2">Configuración de Horarios</h3>
+                <p className="text-blue-100 text-sm opacity-90">
+                  Haga clic en los bloques para habilitar o deshabilitar horas de atención. Los bloques azules indican disponibilidad.
+                </p>
+              </div>
+
+            <div className="glass-panel rounded-3xl shadow-xl border border-white/60 overflow-hidden p-8">
+               <div className="flex mb-6">
+                  <div className="w-28 shrink-0"></div>
+                  <div className="flex-1 flex justify-between text-xs text-gray-400 font-bold uppercase tracking-wider">
+                    {hours.map(h => <div key={h} className="w-full text-center">{h}</div>)}
+                  </div>
+               </div>
+               
+               <div className="space-y-3">
+                {days.map((dayName, dayIndex) => {
+                  const config = schedule.find(s => s.dayOfWeek === dayIndex) || { dayOfWeek: dayIndex, isEnabled: false, activeHours: [] };
+                  const activeHours = config.activeHours || [];
+
+                  return (
+                    <div key={dayIndex} className="flex items-center h-12">
+                       <div className="w-28 shrink-0 font-bold text-gray-700 dark:text-gray-300 text-sm">{dayName}</div>
+                       <div className="flex-1 grid grid-cols-15 gap-1.5 h-full">
+                          {hours.map(hour => {
+                            const isActive = activeHours.includes(hour);
+                            return (
+                              <div 
+                                 key={hour}
+                                 onClick={() => toggleHour(dayIndex, hour)}
+                                 className={`rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-110 ${isActive ? 'bg-gradient-to-b from-blue-500 to-blue-600 shadow-md shadow-blue-500/30' : 'bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                                 title={`${dayName} ${hour}:00`}
+                                 style={{ flex: 1 }}
+                              />
+                            )
+                          })}
+                       </div>
+                    </div>
+                  );
+                })}
+               </div>
+               <style>{`.grid-cols-15 { display: grid; grid-template-columns: repeat(15, minmax(0, 1fr)); }`}</style>
+            </div>
+         </div>
+      </div>
+    );
+  };
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+    </div>
+  );
+
   return (
     <div className={isDarkMode ? 'dark' : ''}>
     <div className="flex h-screen bg-transparent transition-colors duration-200">
-      {/* Sidebar */}
       <aside className="w-20 md:w-72 glass-panel border-r border-white/50 flex flex-col hidden md:flex transition-all z-20 shadow-2xl">
         <div className="p-8 border-b border-gray-100 dark:border-gray-700/50">
           <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary-600 to-teal-500 flex items-center gap-3">
@@ -807,7 +1021,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         </div>
       </aside>
 
-      {/* Mobile Nav */}
       <div className="md:hidden fixed bottom-4 left-4 right-4 glass-panel rounded-2xl shadow-2xl z-50 flex justify-around p-2 border border-white/50">
          <button onClick={() => setActiveTab('dashboard')} className={`p-3 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/40' : 'text-gray-400'}`}><LayoutDashboard size={24}/></button>
          <button onClick={() => setActiveTab('patients')} className={`p-3 rounded-xl transition-all ${activeTab === 'patients' ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/40' : 'text-gray-400'}`}><Users size={24}/></button>
@@ -829,7 +1042,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
          </div>
       </main>
 
-      {/* Manual Booking Modal */}
       {showManualModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass-panel bg-white/95 p-8 rounded-3xl shadow-2xl max-w-md w-full animate-slide-up">
@@ -850,7 +1062,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         </div>
       )}
 
-      {/* Edit Appointment Modal */}
       {editingAppointment && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass-panel bg-white/95 p-8 rounded-3xl shadow-2xl max-w-md w-full animate-slide-up">
@@ -885,7 +1096,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         </div>
       )}
 
-      {/* Payment Processing Modal */}
       {paymentAppointment && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass-panel bg-white/95 p-8 rounded-3xl shadow-2xl max-w-sm w-full animate-slide-up relative overflow-hidden">
