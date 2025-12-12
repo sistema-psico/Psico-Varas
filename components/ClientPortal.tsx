@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, Clock, Check, User, ChevronRight, ChevronLeft, AlertCircle, Search, CalendarCheck, Sparkles, MapPin, Briefcase, CreditCard } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Check, User, ChevronRight, ChevronLeft, AlertCircle, Search, CalendarCheck, Sparkles, MapPin, Briefcase, CreditCard, Smartphone } from 'lucide-react';
 import { DataService } from '../services/dataService';
 import { AppointmentStatus, PaymentMethod, PaymentStatus, Appointment } from '../types';
+import { PROJECT_STATUS } from '../config';
 
 export const ClientPortal: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'book' | 'list'>('book');
@@ -17,7 +18,7 @@ export const ClientPortal: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [slots, setSlots] = useState<string[]>([]);
-  const [formData, setFormData] = useState({ name: '', phone: '', dni: '', notes: '' }); // AGREGADO DNI
+  const [formData, setFormData] = useState({ name: '', phone: '', dni: '', notes: '' }); 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [isHoliday, setIsHoliday] = useState(false);
@@ -133,6 +134,13 @@ export const ClientPortal: React.FC = () => {
     return new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(date);
   };
 
+  // --- NUEVA FUNCIÓN: Enviar WhatsApp ---
+  const handleWhatsAppConfirmation = () => {
+    const message = `Hola ${professionalName}, acabo de reservar un turno desde la web.\n\n📅 Fecha: *${formatDate(selectedDate)}*\n⏰ Hora: *${selectedTime} hs*\n👤 Paciente: *${formData.name}*\n📄 DNI: ${formData.dni}\n\nAguardo su confirmación. Muchas gracias.`;
+    const link = `https://wa.me/${PROJECT_STATUS.providerWhatsapp}?text=${encodeURIComponent(message)}`;
+    window.open(link, '_blank');
+  };
+
   if (success) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
@@ -145,10 +153,19 @@ export const ClientPortal: React.FC = () => {
             <Check size={40} className="animate-bounce-soft" />
           </div>
           <h2 className="text-3xl font-bold text-gray-800 mb-2">¡Reserva Exitosa!</h2>
-          <p className="text-gray-600 mb-8 leading-relaxed">Su turno ha sido reservado para el <br/><span className="font-bold text-teal-700">{formatDate(selectedDate)}</span> a las <span className="font-bold text-teal-700">{selectedTime} hs</span>.</p>
+          <p className="text-gray-600 mb-6 leading-relaxed">Su turno ha sido reservado para el <br/><span className="font-bold text-teal-700">{formatDate(selectedDate)}</span> a las <span className="font-bold text-teal-700">{selectedTime} hs</span>.</p>
+          
+          {/* BOTÓN WHATSAPP NUEVO */}
+          <button 
+            onClick={handleWhatsAppConfirmation}
+            className="btn-modern w-full bg-[#25D366] text-white py-4 rounded-2xl font-bold hover:bg-[#128C7E] shadow-xl shadow-green-500/20 transition mb-4 flex items-center justify-center gap-2"
+          >
+            <Smartphone size={24} /> Enviar Comprobante por WhatsApp
+          </button>
+
           <button 
             onClick={() => window.location.reload()}
-            className="btn-modern w-full bg-gray-900 text-white py-4 rounded-2xl font-medium hover:bg-black shadow-xl transition"
+            className="w-full text-gray-500 py-3 rounded-2xl font-medium hover:text-gray-800 transition"
           >
             Volver al Inicio
           </button>
