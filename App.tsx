@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ClientPortal } from './components/ClientPortal';
 import { AdminPortal } from './components/AdminPortal';
 import { Lock, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 
 // Firebase Auth
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 
 // Kill Switch
@@ -19,6 +19,7 @@ export default function App() {
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true); // Estado de carga inicial
   
   // Login Form State
   const [email, setEmail] = useState('');
@@ -26,15 +27,28 @@ export default function App() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // EFECTO PARA PERSISTENCIA DE SESIÓN
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setIsAdmin(true);
+      } else {
+        setIsAdmin(false);
+      }
+      setAuthChecking(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      // Login real con Firebase
       await signInWithEmailAndPassword(auth, email, password);
-      setIsAdmin(true);
+      // El observer onAuthStateChanged se encargará de setear isAdmin
       setShowLogin(false);
     } catch (err: any) {
       console.error(err);
@@ -56,6 +70,14 @@ export default function App() {
     setEmail('');
     setPassword('');
   };
+
+  if (authChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      </div>
+    );
+  }
 
   if (isAdmin) {
     return <AdminPortal onLogout={handleLogout} />;
