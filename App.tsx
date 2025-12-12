@@ -97,7 +97,7 @@ export default function App() {
               <Lock size={28} />
             </div>
             <h2 className="text-2xl font-bold text-gray-800 tracking-tight">Acceso Profesional</h2>
-            <p className="text-gray-500 text-sm mt-1">Ingrese sus credenciales de Firebase</p>
+            <p className="text-gray-500 text-sm mt-1">Ingrese sus credenciales</p>
           </div>
           
           <form onSubmit={handleLogin} className="space-y-5">
