@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Calendar as CalendarIcon, Clock, Check, User, ChevronRight, ChevronLeft, AlertCircle, Search, CalendarCheck, Sparkles, MapPin, Briefcase, CreditCard, Smartphone } from 'lucide-react';
 import { DataService } from '../services/dataService';
 import { AppointmentStatus, PaymentMethod, PaymentStatus, Appointment } from '../types';
-import { PROJECT_STATUS } from '../config';
 
 export const ClientPortal: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'book' | 'list'>('book');
@@ -12,6 +11,7 @@ export const ClientPortal: React.FC = () => {
   const [professionalSpecialty, setProfessionalSpecialty] = useState('Psicología Clínica');
   const [professionalAddress, setProfessionalAddress] = useState('Av. Corrientes 1234, Piso 5, CABA');
   const [sessionPrice, setSessionPrice] = useState(5000);
+  const [professionalPhone, setProfessionalPhone] = useState(''); // ESTADO PARA EL TELÉFONO DEL PROFESIONAL
 
   // Booking State
   const [step, setStep] = useState(1);
@@ -50,6 +50,8 @@ export const ClientPortal: React.FC = () => {
       setProfessionalSpecialty(data.specialty);
       setProfessionalAddress(data.address);
       setSessionPrice(data.price);
+      // CARGAR EL TELÉFONO DESDE LA CONFIGURACIÓN DE FIREBASE
+      setProfessionalPhone(data.phone || ''); 
   };
 
   const loadSlots = async (date: string) => {
@@ -134,10 +136,21 @@ export const ClientPortal: React.FC = () => {
     return new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(date);
   };
 
-  // --- NUEVA FUNCIÓN: Enviar WhatsApp ---
+  // --- FUNCIÓN CORREGIDA: Enviar WhatsApp al PROFESIONAL ---
   const handleWhatsAppConfirmation = () => {
-    const message = `Hola ${professionalName}, acabo de reservar un turno desde la web.\n\n📅 Fecha: *${formatDate(selectedDate)}*\n⏰ Hora: *${selectedTime} hs*\n👤 Paciente: *${formData.name}*\n📄 DNI: ${formData.dni}\n\n Muchas gracias.`;
-    const link = `https://wa.me/${PROJECT_STATUS.providerWhatsapp}?text=${encodeURIComponent(message)}`;
+    // 1. Limpiar el número de teléfono (quitar espacios, guiones, parentesis)
+    // Se asume que en configuración se guardó algo como "5491122334455"
+    const targetPhone = professionalPhone.replace(/\D/g, '');
+
+    if (!targetPhone) {
+        alert("El profesional no ha configurado un número de teléfono para recibir notificaciones.");
+        return;
+    }
+
+    const message = `Hola ${professionalName}, acabo de reservar un turno desde la web.\n\n📅 Fecha: *${formatDate(selectedDate)}*\n⏰ Hora: *${selectedTime} hs*\n👤 Paciente: *${formData.name}*\n📄 DNI: ${formData.dni}\n\nAguardo su confirmación. Muchas gracias.`;
+    
+    // 2. Usar targetPhone en lugar del número del paciente o config estática
+    const link = `https://wa.me/${targetPhone}?text=${encodeURIComponent(message)}`;
     window.open(link, '_blank');
   };
 
@@ -155,7 +168,7 @@ export const ClientPortal: React.FC = () => {
           <h2 className="text-3xl font-bold text-gray-800 mb-2">¡Reserva Exitosa!</h2>
           <p className="text-gray-600 mb-6 leading-relaxed">Su turno ha sido reservado para el <br/><span className="font-bold text-teal-700">{formatDate(selectedDate)}</span> a las <span className="font-bold text-teal-700">{selectedTime} hs</span>.</p>
           
-          {/* BOTÓN WHATSAPP NUEVO */}
+          {/* BOTÓN WHATSAPP */}
           <button 
             onClick={handleWhatsAppConfirmation}
             className="btn-modern w-full bg-[#25D366] text-white py-4 rounded-2xl font-bold hover:bg-[#128C7E] shadow-xl shadow-green-500/20 transition mb-4 flex items-center justify-center gap-2"
