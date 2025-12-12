@@ -2,7 +2,7 @@ export const PROJECT_STATUS = {
   // --- INTERRUPTOR PRINCIPAL ---
   // true = El software funciona correctamente
   // false = Muestra la pantalla de "Servicio Suspendido"
-  isActive: true, 
+  isActive: false, 
   
   // Datos de contacto para la pantalla de bloqueo
   providerName: "Eduardo Ricci", 
