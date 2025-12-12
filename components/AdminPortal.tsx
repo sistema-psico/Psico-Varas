@@ -32,7 +32,8 @@ import {
   ClipboardList,
   Activity,
   FileEdit,
-  Play
+  Play,
+  MessageCircle // NUEVO IMPORT
 } from 'lucide-react';
 import { Appointment, AppointmentStatus, PaymentMethod, PaymentStatus, WorkingHours, PatientProfile } from '../types';
 import { DataService } from '../services/dataService';
@@ -57,7 +58,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const [professionalSpecialty, setProfessionalSpecialty] = useState('');
   const [professionalAddress, setProfessionalAddress] = useState('');
   const [professionalPrice, setProfessionalPrice] = useState<number>(5000);
-  const [professionalPhone, setProfessionalPhone] = useState(''); // NUEVO: Estado para el teléfono
+  const [professionalPhone, setProfessionalPhone] = useState('');
 
   // Search State
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
@@ -102,8 +103,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       setIsDarkMode(true);
     }
 
-    // SUSCRIPCIÓN EN TIEMPO REAL A TURNOS (MODIFICADO)
-    // Esto asegura que la lista se actualice automáticamente cuando hay cambios
     const unsubscribe = DataService.subscribeToAppointments((data) => {
       setAppointments(data);
     });
@@ -114,7 +113,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Nota: appointments se cargará inicialmente vía suscripción, pero mantenemos esto para otros datos
       const sched = await DataService.getScheduleConfig();
       const profiles = await DataService.getAllPatientProfiles();
       const profData = await DataService.getProfessionalProfile(); 
@@ -126,7 +124,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       setProfessionalSpecialty(profData.specialty);
       setProfessionalAddress(profData.address);
       setProfessionalPrice(profData.price);
-      setProfessionalPhone(profData.phone || ''); // Cargar teléfono guardado
+      setProfessionalPhone(profData.phone || ''); 
 
     } catch (error) {
       console.error("Error loading data:", error);
@@ -154,14 +152,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   };
 
   const handleStatusChange = async (id: string, newStatus: AppointmentStatus) => {
-    // DataService update triggered, subscription will update UI
     await DataService.updateAppointment(id, { status: newStatus });
   };
 
   const handleDeleteAppointment = async (id: string) => {
     if (window.confirm('¿Está seguro de que desea eliminar este turno permanentemente?')) {
         await DataService.deleteAppointment(id);
-        // Subscription will update UI
     }
   };
 
@@ -172,7 +168,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       paymentMethod: method, 
       paymentStatus: PaymentStatus.PAID 
     });
-    // Subscription will update UI
     setPaymentAppointment(null); 
   };
 
@@ -183,13 +178,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         specialty: professionalSpecialty,
         address: professionalAddress,
         price: Number(professionalPrice),
-        phone: professionalPhone // Guardar teléfono
+        phone: professionalPhone 
       });
       alert('Configuración actualizada correctamente');
   };
 
   const handleNoteChange = (id: string, note: string) => {
-    // Actualización optimista local para que el input no salte
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, clinicalObservations: note } : a));
     setUnsavedNotes(prev => {
       const next = new Set(prev);
@@ -213,7 +207,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     let finalPatientId = '';
     let finalPatientName = manualForm.name;
 
-    // LÓGICA ANTI-DUPLICADOS (Ya existente, verificada)
     if (manualForm.dni) {
       const existingProfile = Object.values(allProfiles).find(p => p.dni === manualForm.dni);
       
@@ -254,7 +247,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
 
     setShowManualModal(false);
     setManualForm({ name: '', dni: '', date: '', time: '', phone: '' });
-    // loadData ya no es necesario para appointments por la suscripción
   };
 
   const handleStartTodaySession = async () => {
@@ -353,7 +345,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       await DataService.savePatientProfile(patientProfile);
       setAllProfiles(prev => ({...prev, [patientProfile.id]: patientProfile}));
       setIsProfileExpanded(false);
-      // loadData(); // Opcional si queremos refrescar todo, pero update local basta
     }
   };
 
@@ -574,9 +565,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                         {appt.status}
                         </span>
                     </td>
+                    
+                    {/* COLUMNA PAGO MODIFICADA: Click para editar */}
                     <td className="p-5 text-sm">
                         {appt.paymentStatus === PaymentStatus.PAID ? (
-                          <span className="text-green-600 dark:text-green-400 font-bold flex items-center gap-1"><Check size={14}/> {appt.paymentMethod}</span>
+                          <button
+                            onClick={() => setPaymentAppointment(appt)} // Permite reabrir modal
+                            className="text-green-600 dark:text-green-400 font-bold flex items-center gap-1 hover:bg-green-50 dark:hover:bg-green-900/20 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                            title="Clic para modificar forma de pago"
+                          >
+                            <Check size={14}/> {appt.paymentMethod} <Edit2 size={10} className="ml-1 opacity-50"/>
+                          </button>
                         ) : (
                           <button 
                             onClick={() => setPaymentAppointment(appt)}
@@ -586,7 +585,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                           </button>
                         )}
                     </td>
+
                     <td className="p-5 flex gap-2">
+                        {/* BOTÓN WHATSAPP NUEVO */}
+                        {appt.patientPhone && (
+                            <a 
+                                href={`https://wa.me/${appt.patientPhone.replace(/\D/g, '')}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 p-2 rounded-lg transition-colors"
+                                title="Contactar por WhatsApp"
+                            >
+                                <MessageCircle size={18} />
+                            </a>
+                        )}
                         <button onClick={() => setEditingAppointment(appt)} className="text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 p-2 rounded-lg transition-colors"><Edit2 size={18} /></button>
                         <button onClick={() => handleDeleteAppointment(appt.id)} className="text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 p-2 rounded-lg transition-colors"><Trash2 size={18} /></button>
                     </td>
