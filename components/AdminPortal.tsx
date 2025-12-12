@@ -57,6 +57,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const [professionalSpecialty, setProfessionalSpecialty] = useState('');
   const [professionalAddress, setProfessionalAddress] = useState('');
   const [professionalPrice, setProfessionalPrice] = useState<number>(5000);
+  const [professionalPhone, setProfessionalPhone] = useState(''); // NUEVO: Estado para el teléfono
 
   // Search State
   const [patientSearchTerm, setPatientSearchTerm] = useState('');
@@ -100,17 +101,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     if (savedTheme === 'dark') {
       setIsDarkMode(true);
     }
+
+    // SUSCRIPCIÓN EN TIEMPO REAL A TURNOS (MODIFICADO)
+    // Esto asegura que la lista se actualice automáticamente cuando hay cambios
+    const unsubscribe = DataService.subscribeToAppointments((data) => {
+      setAppointments(data);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const appts = await DataService.getAppointments();
+      // Nota: appointments se cargará inicialmente vía suscripción, pero mantenemos esto para otros datos
       const sched = await DataService.getScheduleConfig();
       const profiles = await DataService.getAllPatientProfiles();
       const profData = await DataService.getProfessionalProfile(); 
       
-      setAppointments(appts);
       setSchedule(sched);
       setAllProfiles(profiles);
       
@@ -118,6 +126,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       setProfessionalSpecialty(profData.specialty);
       setProfessionalAddress(profData.address);
       setProfessionalPrice(profData.price);
+      setProfessionalPhone(profData.phone || ''); // Cargar teléfono guardado
 
     } catch (error) {
       console.error("Error loading data:", error);
@@ -145,25 +154,25 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   };
 
   const handleStatusChange = async (id: string, newStatus: AppointmentStatus) => {
-    const updated = await DataService.updateAppointment(id, { status: newStatus });
-    setAppointments(updated);
+    // DataService update triggered, subscription will update UI
+    await DataService.updateAppointment(id, { status: newStatus });
   };
 
   const handleDeleteAppointment = async (id: string) => {
     if (window.confirm('¿Está seguro de que desea eliminar este turno permanentemente?')) {
-        const updated = await DataService.deleteAppointment(id);
-        setAppointments(updated);
+        await DataService.deleteAppointment(id);
+        // Subscription will update UI
     }
   };
 
   const processPayment = async (method: PaymentMethod) => {
     if (!paymentAppointment) return;
     
-    const updated = await DataService.updateAppointment(paymentAppointment.id, { 
+    await DataService.updateAppointment(paymentAppointment.id, { 
       paymentMethod: method, 
       paymentStatus: PaymentStatus.PAID 
     });
-    setAppointments(updated);
+    // Subscription will update UI
     setPaymentAppointment(null); 
   };
 
@@ -173,12 +182,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         name: professionalName,
         specialty: professionalSpecialty,
         address: professionalAddress,
-        price: Number(professionalPrice)
+        price: Number(professionalPrice),
+        phone: professionalPhone // Guardar teléfono
       });
       alert('Configuración actualizada correctamente');
   };
 
   const handleNoteChange = (id: string, note: string) => {
+    // Actualización optimista local para que el input no salte
     setAppointments(prev => prev.map(a => a.id === id ? { ...a, clinicalObservations: note } : a));
     setUnsavedNotes(prev => {
       const next = new Set(prev);
@@ -202,6 +213,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     let finalPatientId = '';
     let finalPatientName = manualForm.name;
 
+    // LÓGICA ANTI-DUPLICADOS (Ya existente, verificada)
     if (manualForm.dni) {
       const existingProfile = Object.values(allProfiles).find(p => p.dni === manualForm.dni);
       
@@ -242,16 +254,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
 
     setShowManualModal(false);
     setManualForm({ name: '', dni: '', date: '', time: '', phone: '' });
-    loadData();
+    // loadData ya no es necesario para appointments por la suscripción
   };
 
-  // --- NUEVA FUNCIÓN: INICIAR SESIÓN HOY ---
   const handleStartTodaySession = async () => {
     if (!patientProfile) return;
     
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
-    // Formato HH:MM
     const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
 
     await DataService.addAppointment({
@@ -264,11 +274,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         cost: Number(professionalPrice),
         paymentStatus: PaymentStatus.UNPAID,
         paymentMethod: PaymentMethod.PENDING,
-        clinicalObservations: '' // Empieza vacía para evitar errores
+        clinicalObservations: '' 
     });
-    
-    // Recargar para que aparezca
-    loadData();
   };
 
   const handleEditAppointmentSubmit = async (e: React.FormEvent) => {
@@ -281,7 +288,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       status: editingAppointment.status
     });
     setEditingAppointment(null);
-    loadData();
   };
 
   const saveSchedule = async (newSchedule: WorkingHours[]) => {
@@ -347,7 +353,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       await DataService.savePatientProfile(patientProfile);
       setAllProfiles(prev => ({...prev, [patientProfile.id]: patientProfile}));
       setIsProfileExpanded(false);
-      loadData();
+      // loadData(); // Opcional si queremos refrescar todo, pero update local basta
     }
   };
 
@@ -644,17 +650,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       const sortedHistory = (patientData.appointments || []).sort((a,b) => new Date(b.date + 'T' + b.time).getTime() - new Date(a.date + 'T' + a.time).getTime());
       const paymentHistory = (patientData.appointments || []).filter(a => a.paymentStatus === PaymentStatus.PAID);
 
-      // --- LOGICA MEJORADA DE SESIÓN ACTUAL ---
-      // Obtenemos la fecha de HOY
+      // --- LOGICA DE SESIÓN ACTUAL ---
       const todayStr = new Date().toISOString().split('T')[0];
-      
-      // 1. Buscamos si hay un turno para HOY específicamente
       const todaysAppointment = sortedHistory.find(a => a.date === todayStr);
-
-      // 2. Definimos cuál es la "última sesión histórica" (cualquiera anterior a hoy)
-      // Filtramos los que NO son de hoy y tomamos el último
-      const historicalAppointments = sortedHistory.filter(a => a.date !== todayStr);
-      const lastHistoricalAppointment = historicalAppointments.length > 0 ? historicalAppointments[historicalAppointments.length - 1] : null;
+      const lastHistoricalAppointment = sortedHistory.filter(a => a.date !== todayStr)[0];
 
       return (
         <div className="space-y-6 animate-slide-up">
@@ -744,7 +743,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                   
                   {/* Current Session Note Widget (SMART LOGIC) */}
                   <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 md:col-span-2 relative overflow-hidden">
-                     {/* Fondo sutil para destacar la sesión actual */}
                      <div className="absolute top-0 right-0 w-32 h-32 bg-primary-100/50 dark:bg-primary-900/20 rounded-bl-full pointer-events-none"></div>
 
                      <div className="relative z-10">
@@ -1196,6 +1194,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
                       placeholder="5000"
                     />
                  </div>
+
+                 {/* CAMPO DE TELÉFONO NUEVO */}
+                 <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Teléfono Profesional (WhatsApp)</label>
+                    <input 
+                      type="tel" 
+                      value={professionalPhone}
+                      onChange={(e) => setProfessionalPhone(e.target.value)}
+                      className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="Ej: 5491122334455 (Sin espacios ni guiones)"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Este número se usará para el enlace de contacto en la pantalla de bloqueo.</p>
+                 </div>
                </div>
                <div className="flex justify-end mt-4">
                   <button type="submit" className="bg-gray-900 dark:bg-white dark:text-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-black shadow-lg">Guardar Cambios</button>
@@ -1324,7 +1335,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
             <form onSubmit={handleManualSubmit} className="space-y-4">
               <div><label className="block text-xs font-bold text-gray-500 uppercase mb-1">Paciente</label><input required type="text" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={manualForm.name} onChange={e => setManualForm({...manualForm, name: e.target.value})} /></div>
               
-              {/* CAMPO DNI AGREGADO */}
+              {/* CAMPO DNI */}
               <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">DNI (Opcional - Para vincular ficha)</label>
                   <input type="text" className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50" value={manualForm.dni} onChange={e => setManualForm({...manualForm, dni: e.target.value})} placeholder="Para evitar duplicados" />
