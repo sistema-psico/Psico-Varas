@@ -11,7 +11,8 @@ import {
   setDoc,
   query,
   where,
-  limit
+  limit,
+  onSnapshot
 } from 'firebase/firestore';
 
 const HOLIDAYS = [
@@ -36,6 +37,7 @@ export interface ProfessionalProfile {
   specialty: string;
   address: string;
   price: number;
+  phone: string; // NUEVO CAMPO: Teléfono del profesional para WhatsApp
 }
 
 export const DataService = {
@@ -63,7 +65,9 @@ export const DataService = {
     await setDoc(doc(db, 'settings', 'schedule'), { hours: schedule });
   },
 
-  // --- TURNOS ---
+  // --- TURNOS (CRUD & TIEMPO REAL) ---
+  
+  // Función Legacy (Una sola vez)
   getAppointments: async (): Promise<Appointment[]> => {
     try {
       const q = query(collection(db, 'appointments'));
@@ -73,6 +77,18 @@ export const DataService = {
       console.error("Error getting appointments:", e);
       return [];
     }
+  },
+
+  // NUEVA FUNCIÓN: Suscripción en tiempo real
+  subscribeToAppointments: (callback: (appointments: Appointment[]) => void) => {
+    const q = query(collection(db, 'appointments'));
+    return onSnapshot(q, (querySnapshot) => {
+      const appointments = querySnapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data() 
+      } as Appointment));
+      callback(appointments);
+    });
   },
 
   addAppointment: async (appt: Omit<Appointment, 'id'>): Promise<Appointment> => {
@@ -85,24 +101,20 @@ export const DataService = {
     }
   },
 
-  updateAppointment: async (id: string, updates: Partial<Appointment>): Promise<Appointment[]> => {
+  updateAppointment: async (id: string, updates: Partial<Appointment>): Promise<void> => {
     try {
       const apptRef = doc(db, 'appointments', id);
       await updateDoc(apptRef, updates);
-      return await DataService.getAppointments(); 
     } catch (e) {
       console.error("Error updating appointment:", e);
-      return [];
     }
   },
 
-  deleteAppointment: async (id: string): Promise<Appointment[]> => {
+  deleteAppointment: async (id: string): Promise<void> => {
     try {
       await deleteDoc(doc(db, 'appointments', id));
-      return await DataService.getAppointments();
     } catch (e) {
       console.error("Error deleting appointment:", e);
-      return [];
     }
   },
 
@@ -118,7 +130,6 @@ export const DataService = {
     }
   },
 
-  // --- NUEVA FUNCIÓN: Buscar paciente por DNI ---
   getPatientByDni: async (dni: string): Promise<PatientProfile | null> => {
     try {
       const q = query(collection(db, 'patients'), where("dni", "==", dni), limit(1));
@@ -172,21 +183,24 @@ export const DataService = {
           name: data.name || 'Lic. Gabriel Medina',
           specialty: data.specialty || 'Psicología Clínica',
           address: data.address || 'Av. Corrientes 1234, Piso 5, CABA',
-          price: data.price || 5000
+          price: data.price || 5000,
+          phone: data.phone || '' // Default vacío
         };
       }
       return {
         name: 'Lic. Gabriel Medina',
         specialty: 'Psicología Clínica',
         address: 'Av. Corrientes 1234, Piso 5, CABA',
-        price: 5000
+        price: 5000,
+        phone: ''
       };
     } catch (e) {
       return {
         name: 'Lic. Gabriel Medina',
         specialty: 'Psicología Clínica',
         address: 'Av. Corrientes 1234, Piso 5, CABA',
-        price: 5000
+        price: 5000,
+        phone: ''
       };
     }
   },
