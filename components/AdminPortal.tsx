@@ -1288,7 +1288,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
         <div className="p-8 border-b border-gray-100 dark:border-gray-700/50">
           <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary-600 to-teal-500 flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-br from-primary-600 to-teal-500 rounded-xl flex items-center justify-center text-white text-xl shadow-lg shadow-primary-500/30">P</div>
-            <span className="hidden md:block">PsicoAdmin</span>
+            <span className="hidden md:block">Lic Mario Varas</span>
           </h1>
         </div>
         
