@@ -31,7 +31,8 @@ import {
   Briefcase,
   ClipboardList,
   Activity,
-  FileEdit
+  FileEdit,
+  Play
 } from 'lucide-react';
 import { Appointment, AppointmentStatus, PaymentMethod, PaymentStatus, WorkingHours, PatientProfile } from '../types';
 import { DataService } from '../services/dataService';
@@ -69,7 +70,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
 
   // Manual Booking State
   const [showManualModal, setShowManualModal] = useState(false);
-  // AGREGADO: Campo DNI al formulario manual
   const [manualForm, setManualForm] = useState({ name: '', dni: '', date: '', time: '', phone: '' });
 
   // Edit Appointment State
@@ -87,7 +87,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   // Note State
   const [unsavedNotes, setUnsavedNotes] = useState<Set<string>>(new Set());
   
-  // History Accordion State (AGREGADO: Para minimizar historias)
+  // History Accordion State 
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<Set<string>>(new Set());
 
   // AI State
@@ -199,20 +199,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Lógica para evitar duplicados por DNI
     let finalPatientId = '';
     let finalPatientName = manualForm.name;
 
-    // 1. Verificar si ya existe un perfil con ese DNI en memoria (allProfiles)
     if (manualForm.dni) {
       const existingProfile = Object.values(allProfiles).find(p => p.dni === manualForm.dni);
       
       if (existingProfile) {
-        // Usar paciente existente
         finalPatientId = existingProfile.id;
         finalPatientName = `${existingProfile.firstName} ${existingProfile.lastName}`;
       } else {
-        // Crear nuevo perfil automáticamente si no existe
         finalPatientId = 'manual-' + Date.now();
         const newProfile: PatientProfile = {
             id: finalPatientId,
@@ -225,12 +221,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
             diagnosis: '',
             notes: ''
         };
-        // Guardar perfil en DB y Estado local
         await DataService.savePatientProfile(newProfile);
         setAllProfiles(prev => ({...prev, [finalPatientId]: newProfile}));
       }
     } else {
-      // Si no puso DNI, generar ID temporal (no recomendado pero permitido)
       finalPatientId = 'manual-' + Date.now();
     }
 
@@ -248,6 +242,32 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
 
     setShowManualModal(false);
     setManualForm({ name: '', dni: '', date: '', time: '', phone: '' });
+    loadData();
+  };
+
+  // --- NUEVA FUNCIÓN: INICIAR SESIÓN HOY ---
+  const handleStartTodaySession = async () => {
+    if (!patientProfile) return;
+    
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    // Formato HH:MM
+    const timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+
+    await DataService.addAppointment({
+        patientName: `${patientProfile.firstName} ${patientProfile.lastName}`,
+        patientPhone: patientProfile.phone,
+        patientId: patientProfile.id,
+        date: dateStr,
+        time: timeStr,
+        status: AppointmentStatus.CONFIRMED,
+        cost: Number(professionalPrice),
+        paymentStatus: PaymentStatus.UNPAID,
+        paymentMethod: PaymentMethod.PENDING,
+        clinicalObservations: '' // Empieza vacía para evitar errores
+    });
+    
+    // Recargar para que aparezca
     loadData();
   };
 
@@ -274,7 +294,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
     setAiSummary('');
     setIsProfileExpanded(false); 
     setPatientTab('overview'); 
-    setExpandedHistoryIds(new Set()); // Reset history expansion
+    setExpandedHistoryIds(new Set()); 
     const existing = await DataService.getPatientProfile(patientId);
     setPatientProfile(existing || {
       id: patientId,
@@ -624,8 +644,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
       const sortedHistory = (patientData.appointments || []).sort((a,b) => new Date(b.date + 'T' + b.time).getTime() - new Date(a.date + 'T' + a.time).getTime());
       const paymentHistory = (patientData.appointments || []).filter(a => a.paymentStatus === PaymentStatus.PAID);
 
-      // Lógica para encontrar la sesión "Actual" o la más reciente
-      const latestAppointment = sortedHistory.length > 0 ? sortedHistory[sortedHistory.length - 1] : null;
+      // --- LOGICA MEJORADA DE SESIÓN ACTUAL ---
+      // Obtenemos la fecha de HOY
+      const todayStr = new Date().toISOString().split('T')[0];
+      
+      // 1. Buscamos si hay un turno para HOY específicamente
+      const todaysAppointment = sortedHistory.find(a => a.date === todayStr);
+
+      // 2. Definimos cuál es la "última sesión histórica" (cualquiera anterior a hoy)
+      // Filtramos los que NO son de hoy y tomamos el último
+      const historicalAppointments = sortedHistory.filter(a => a.date !== todayStr);
+      const lastHistoricalAppointment = historicalAppointments.length > 0 ? historicalAppointments[historicalAppointments.length - 1] : null;
 
       return (
         <div className="space-y-6 animate-slide-up">
@@ -713,34 +742,66 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onLogout }) => {
            {patientTab === 'overview' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
                   
-                  {/* Current/Latest Session Note Widget */}
-                  <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 md:col-span-2">
-                     <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2"><FileEdit size={18} /> Sesión Actual / Última</h3>
-                     {latestAppointment ? (
-                        <div>
-                           <div className="flex justify-between items-center mb-2">
-                              <span className="text-sm font-bold text-primary-600 dark:text-primary-400">{latestAppointment.date} - {latestAppointment.time} hs</span>
-                              {unsavedNotes.has(latestAppointment.id) && <span className="text-xs text-amber-500 font-bold animate-pulse">Sin guardar</span>}
-                           </div>
-                           <textarea 
-                              className="w-full border border-gray-200 dark:border-gray-600 rounded-xl p-4 text-sm bg-white/50 dark:bg-gray-700/50 focus:bg-white dark:focus:bg-gray-600 dark:text-white transition-colors outline-none focus:ring-2 focus:ring-primary-200 min-h-[120px]"
-                              rows={5} 
-                              placeholder="Escriba las observaciones de la sesión de hoy..."
-                              value={latestAppointment.clinicalObservations || ''}
-                              onChange={(e) => handleNoteChange(latestAppointment.id, e.target.value)}
-                           />
-                           <div className="flex justify-end mt-3">
-                              <button 
-                                  onClick={() => handleSaveNote(latestAppointment.id, latestAppointment.clinicalObservations || '')}
-                                  className="bg-primary-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-primary-700 flex items-center gap-2 shadow-md"
-                              >
-                                  <Save size={16} /> Guardar Nota
-                              </button>
-                           </div>
-                        </div>
-                     ) : (
-                        <div className="text-center py-6 text-gray-400">No hay sesiones registradas para mostrar.</div>
-                     )}
+                  {/* Current Session Note Widget (SMART LOGIC) */}
+                  <div className="glass-panel p-6 rounded-3xl shadow-lg border border-white/60 md:col-span-2 relative overflow-hidden">
+                     {/* Fondo sutil para destacar la sesión actual */}
+                     <div className="absolute top-0 right-0 w-32 h-32 bg-primary-100/50 dark:bg-primary-900/20 rounded-bl-full pointer-events-none"></div>
+
+                     <div className="relative z-10">
+                        <h3 className="font-bold text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2 text-lg">
+                           <FileEdit size={20} className="text-primary-600 dark:text-primary-400"/> 
+                           Sesión de Hoy
+                        </h3>
+                        
+                        {todaysAppointment ? (
+                            // CASO A: SI HAY TURNO HOY -> MODO EDICIÓN
+                            <div>
+                              <div className="flex justify-between items-center mb-2 px-1">
+                                  <span className="text-sm font-bold text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-900/30 px-3 py-1 rounded-full border border-primary-100 dark:border-primary-800">
+                                    {todaysAppointment.date} - {todaysAppointment.time} hs
+                                  </span>
+                                  {unsavedNotes.has(todaysAppointment.id) && <span className="text-xs text-amber-500 font-bold animate-pulse">Guardando...</span>}
+                              </div>
+                              <textarea 
+                                  className="w-full border border-gray-300 dark:border-gray-600 rounded-xl p-4 text-base bg-white dark:bg-gray-800 focus:bg-white dark:focus:bg-gray-700 text-gray-800 dark:text-white transition-all outline-none focus:ring-2 focus:ring-primary-500 min-h-[160px] shadow-inner"
+                                  rows={6} 
+                                  placeholder="Escriba las observaciones de la sesión de hoy..."
+                                  value={todaysAppointment.clinicalObservations || ''}
+                                  onChange={(e) => handleNoteChange(todaysAppointment.id, e.target.value)}
+                              />
+                              <div className="flex justify-end mt-4">
+                                  <button 
+                                      onClick={() => handleSaveNote(todaysAppointment.id, todaysAppointment.clinicalObservations || '')}
+                                      className="bg-primary-600 text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-primary-700 flex items-center gap-2 shadow-lg shadow-primary-500/20 active:scale-95 transition-all"
+                                  >
+                                      <Save size={18} /> Guardar Nota
+                                  </button>
+                              </div>
+                            </div>
+                        ) : (
+                            // CASO B: NO HAY TURNO HOY -> BOTÓN INICIAR + REFERENCIA ÚLTIMA VISITA
+                            <div className="flex flex-col items-center justify-center py-6">
+                                <div className="text-center mb-6">
+                                   <p className="text-gray-500 dark:text-gray-400 mb-4">No hay una sesión iniciada para la fecha de hoy.</p>
+                                   <button 
+                                     onClick={handleStartTodaySession}
+                                     className="bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-8 py-4 rounded-2xl font-bold flex items-center gap-3 shadow-xl hover:scale-105 transition-transform"
+                                   >
+                                     <Play size={20} fill="currentColor" /> Iniciar Sesión de Hoy
+                                   </button>
+                                </div>
+                                
+                                {lastHistoricalAppointment && (
+                                   <div className="w-full mt-6 pt-6 border-t border-gray-200 dark:border-gray-700 opacity-75">
+                                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Referencia: Última Sesión ({lastHistoricalAppointment.date})</p>
+                                      <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-xl text-sm text-gray-600 dark:text-gray-300 italic border border-gray-200 dark:border-gray-700">
+                                         "{lastHistoricalAppointment.clinicalObservations || 'Sin notas.'}"
+                                      </div>
+                                   </div>
+                                )}
+                            </div>
+                        )}
+                     </div>
                   </div>
 
                   {/* AI Summary Widget */}
