@@ -136,7 +136,7 @@ export const ClientPortal: React.FC = () => {
 
   // --- NUEVA FUNCIÓN: Enviar WhatsApp ---
   const handleWhatsAppConfirmation = () => {
-    const message = `Hola ${professionalName}, acabo de reservar un turno desde la web.\n\n📅 Fecha: *${formatDate(selectedDate)}*\n⏰ Hora: *${selectedTime} hs*\n👤 Paciente: *${formData.name}*\n📄 DNI: ${formData.dni}\n\nAguardo su confirmación. Muchas gracias.`;
+    const message = `Hola ${professionalName}, acabo de reservar un turno desde la web.\n\n📅 Fecha: *${formatDate(selectedDate)}*\n⏰ Hora: *${selectedTime} hs*\n👤 Paciente: *${formData.name}*\n📄 DNI: ${formData.dni}\n\n Muchas gracias.`;
     const link = `https://wa.me/${PROJECT_STATUS.providerWhatsapp}?text=${encodeURIComponent(message)}`;
     window.open(link, '_blank');
   };
