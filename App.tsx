@@ -1,83 +1,57 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ClientPortal } from './components/ClientPortal';
 import { AdminPortal } from './components/AdminPortal';
-import { Lock, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
+import { Lock, ArrowRight } from 'lucide-react';
 
-// Firebase Auth
-import { signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
-import { auth } from './firebase';
-
-// Kill Switch
-import { PROJECT_STATUS } from './config';
-import { SuspendedView } from './components/SuspendedView';
+// --- NUEVAS IMPORTACIONES ---
+import { useLicense } from './hooks/useLicense';
+import { ServiceSuspended } from './components/ServiceSuspended';
+// ----------------------------
 
 export default function App() {
-  // 1. VERIFICACIÓN DE LICENCIA (KILL SWITCH)
-  if (!PROJECT_STATUS.isActive) {
-    return <SuspendedView />;
-  }
+  // 1. ACTIVAMOS EL VIGILANTE
+  const { isLocked, loading } = useLicense();
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
-  const [authChecking, setAuthChecking] = useState(true); // Estado de carga inicial
   
   // Login Form State
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  // EFECTO PARA PERSISTENCIA DE SESIÓN
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setIsAdmin(true);
-      } else {
-        setIsAdmin(false);
-      }
-      setAuthChecking(false);
-    });
+  // 2. PANTALLA DE CARGA (Para que no parpadee)
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
-    return () => unsubscribe();
-  }, []);
+  // 3. ¡BLOQUEO! SI LA LICENCIA ESTÁ INACTIVA, MOSTRAMOS ESTO Y NADA MÁS
+  if (isLocked) {
+    return <ServiceSuspended />;
+  }
 
-  const handleLogin = async (e: React.FormEvent) => {
+  // --- A PARTIR DE AQUÍ, EL CÓDIGO SIGUE NORMAL ---
+
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      // El observer onAuthStateChanged se encargará de setear isAdmin
+    if (username === 'admin' && password === 'admin') {
+      setIsAdmin(true);
       setShowLogin(false);
-    } catch (err: any) {
-      console.error(err);
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
-        setError('Email o contraseña incorrectos.');
-      } else if (err.code === 'auth/too-many-requests') {
-        setError('Demasiados intentos. Espere un momento.');
-      } else {
-        setError('Error de conexión. Intente nuevamente.');
-      }
-    } finally {
-      setLoading(false);
+      setError('');
+    } else {
+      setError('Credenciales inválidas');
     }
   };
 
   const handleLogout = () => {
-    auth.signOut();
     setIsAdmin(false);
-    setEmail('');
+    setUsername('');
     setPassword('');
   };
-
-  if (authChecking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-      </div>
-    );
-  }
 
   if (isAdmin) {
     return <AdminPortal onLogout={handleLogout} />;
@@ -102,14 +76,13 @@ export default function App() {
           
           <form onSubmit={handleLogin} className="space-y-5">
             <div className="group">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 ml-1 group-focus-within:text-primary-600 transition-colors">Email</label>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 ml-1 group-focus-within:text-primary-600 transition-colors">Usuario</label>
               <input 
-                type="email" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text" 
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-5 py-3 bg-white/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all duration-300"
-                placeholder="doctor@email.com"
-                required
+                placeholder="Ej: admin"
               />
             </div>
             <div className="group">
@@ -120,22 +93,17 @@ export default function App() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-5 py-3 bg-white/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-all duration-300"
                 placeholder="••••••••"
-                required
               />
             </div>
             
             {error && (
-              <div className="bg-red-50 text-red-500 text-sm p-3 rounded-xl flex items-center gap-2 animate-pulse border border-red-100">
-                <AlertCircle size={16} /> {error}
+              <div className="bg-red-50 text-red-500 text-sm p-3 rounded-xl flex items-center justify-center animate-pulse">
+                {error}
               </div>
             )}
             
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="btn-modern w-full bg-gradient-to-r from-primary-600 to-primary-500 text-white py-3.5 rounded-xl font-medium shadow-lg shadow-primary-500/30 hover:shadow-primary-500/50 flex items-center justify-center gap-2 group disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="animate-spin" /> : <>Ingresar <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform"/></>}
+            <button type="submit" className="btn-modern w-full bg-gradient-to-r from-primary-600 to-primary-500 text-white py-3.5 rounded-xl font-medium shadow-lg shadow-primary-500/30 hover:shadow-primary-500/50 flex items-center justify-center gap-2 group">
+              Ingresar <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform"/>
             </button>
             <button 
               type="button" 
@@ -145,6 +113,9 @@ export default function App() {
               Volver al sitio
             </button>
           </form>
+          <div className="mt-8 text-center text-[10px] text-gray-400 font-mono bg-gray-50 rounded-lg py-2">
+             Demo: admin / admin
+          </div>
         </div>
       </div>
     );
